@@ -6,7 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Trash2, Plus, LogOut, Heart, Save, Loader2, Upload, X, Eye, Palette, QrCode } from "lucide-react";
+import {
+  Trash2,
+  Plus,
+  LogOut,
+  Heart,
+  Save,
+  Loader2,
+  Upload,
+  X,
+  Eye,
+  Palette,
+  QrCode,
+} from "lucide-react";
 import { useAuth } from "@/lib/use-auth";
 import {
   useTimeline,
@@ -19,6 +31,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import OurStory from "@/components/OurStory";
 import { motion, AnimatePresence } from "framer-motion";
+import { QRCodeSVG } from "qrcode.react";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
@@ -98,21 +111,33 @@ function AdminPage() {
             <p className="text-sm text-muted-foreground">{session?.user.email}</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => setShowPreview(true)} variant="secondary" className="gap-2 rounded-xl">
-                <Eye className="h-4 w-4" /> Preview
+            <Button
+              onClick={() => setShowPreview(true)}
+              variant="secondary"
+              className="gap-2 rounded-xl"
+            >
+              <Eye className="h-4 w-4" /> Preview
             </Button>
             <Button onClick={signOut} variant="outline" className="gap-2 rounded-xl">
-                <LogOut className="h-4 w-4" /> Sair
+              <LogOut className="h-4 w-4" /> Sair
             </Button>
           </div>
         </div>
 
         <Tabs defaultValue="timeline" className="w-full">
           <TabsList className="grid w-full grid-cols-4 rounded-xl bg-white/5 p-1">
-            <TabsTrigger value="timeline" className="rounded-lg">Timeline</TabsTrigger>
-            <TabsTrigger value="stats" className="rounded-lg">Estatísticas</TabsTrigger>
-            <TabsTrigger value="letter" className="rounded-lg">Configurações</TabsTrigger>
-            <TabsTrigger value="share" className="rounded-lg">Compartilhar</TabsTrigger>
+            <TabsTrigger value="timeline" className="rounded-lg">
+              Timeline
+            </TabsTrigger>
+            <TabsTrigger value="stats" className="rounded-lg">
+              Estatísticas
+            </TabsTrigger>
+            <TabsTrigger value="letter" className="rounded-lg">
+              Configurações
+            </TabsTrigger>
+            <TabsTrigger value="share" className="rounded-lg">
+              Compartilhar
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="timeline" className="mt-6">
             <TimelineEditor />
@@ -139,10 +164,10 @@ function AdminPage() {
             className="fixed inset-0 z-[100] bg-background"
           >
             <div className="absolute right-6 top-6 z-[110]">
-              <Button 
-                onClick={() => setShowPreview(false)} 
-                variant="destructive" 
-                size="icon" 
+              <Button
+                onClick={() => setShowPreview(false)}
+                variant="destructive"
+                size="icon"
                 className="rounded-full shadow-glow cursor-pointer"
               >
                 <X className="h-5 w-5" />
@@ -161,39 +186,172 @@ function AdminPage() {
 /* -------------------- Share Panel -------------------- */
 function SharePanel() {
   const [url, setUrl] = useState("");
+  const [qrColor, setQrColor] = useState("#eb5e8e");
+  const [qrSize, setQrSize] = useState(256);
+  const [qrLogo, setQrLogo] = useState("");
+  const [includeMargin, setIncludeMargin] = useState(true);
+
   useEffect(() => {
     setUrl(window.location.origin);
   }, []);
 
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
-
   return (
-    <div className="glass flex flex-col items-center gap-6 rounded-2xl p-8 text-center">
-      <div className="rounded-2xl bg-white p-4 shadow-glow">
-        <img src={qrUrl} alt="QR Code" className="h-48 w-48" />
+    <div className="grid gap-8 lg:grid-cols-[1fr_350px]">
+      <div className="glass flex flex-col items-center justify-center gap-8 rounded-3xl p-8 text-center min-h-[500px]">
+        <div className="relative group">
+          <div className="rounded-3xl bg-white p-6 shadow-glow transition-all duration-500 group-hover:scale-105">
+            <QRCodeSVG
+              id="qr-code-svg"
+              value={url}
+              size={qrSize}
+              fgColor={qrColor}
+              level="H"
+              includeMargin={includeMargin}
+              imageSettings={
+                qrLogo
+                  ? {
+                      src: qrLogo,
+                      x: undefined,
+                      y: undefined,
+                      height: qrSize * 0.2,
+                      width: qrSize * 0.2,
+                      excavate: true,
+                    }
+                  : undefined
+              }
+            />
+          </div>
+          <div className="absolute -inset-4 z-[-10] animate-spin-slow rounded-[40px] border-2 border-dashed border-accent/20" />
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="font-display text-3xl">Sua História está Pronta!</h3>
+          <p className="max-w-xs text-sm text-muted-foreground">
+            Personalize o QR Code, baixe-o ou copie o link para compartilhar seu amor.
+          </p>
+        </div>
+
+        <div className="flex w-full max-w-sm items-center gap-2 rounded-2xl border border-white/5 bg-white/5 p-2">
+          <Input value={url} readOnly className="border-none bg-transparent focus-visible:ring-0" />
+          <Button
+            size="sm"
+            onClick={() => {
+              navigator.clipboard.writeText(url);
+              toast.success("Link copiado!");
+            }}
+            className="rounded-xl px-6"
+          >
+            Copiar
+          </Button>
+        </div>
       </div>
-      <div className="space-y-2">
-        <h3 className="font-display text-2xl">Sua História está Pronta!</h3>
-        <p className="text-sm text-muted-foreground">
-          Aponte a câmera do celular para o QR Code para abrir.
-        </p>
-      </div>
-      <div className="flex w-full max-w-sm items-center gap-2 rounded-xl bg-white/5 p-2">
-        <Input value={url} readOnly className="border-none bg-transparent" />
-        <Button size="sm" onClick={() => {
-            navigator.clipboard.writeText(url);
-            toast.success("Link copiado!");
-        }} className="rounded-lg">Copiar</Button>
+
+      <div className="glass flex h-fit flex-col gap-6 rounded-3xl p-6">
+        <h4 className="flex items-center gap-2 font-display text-lg">
+          <Palette className="h-5 w-5 text-accent" /> Personalizar
+        </h4>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Cor do QR Code
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {["#eb5e8e", "#000000", "#4f46e5", "#059669", "#d97706"].map((color) => (
+                <button
+                  key={color}
+                  onClick={() => setQrColor(color)}
+                  className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 ${
+                    qrColor === color ? "scale-110 border-white shadow-glow" : "border-transparent"
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+              <input
+                type="color"
+                value={qrColor}
+                onChange={(e) => setQrColor(e.target.value)}
+                className="h-8 w-8 cursor-pointer overflow-hidden rounded-full border-none bg-transparent"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Tamanho ({qrSize}px)
+            </label>
+            <input
+              type="range"
+              min="128"
+              max="512"
+              step="32"
+              value={qrSize}
+              onChange={(e) => setQrSize(Number(e.target.value))}
+              className="w-full accent-accent"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Foto no Centro
+            </label>
+            <MediaUpload type="image" currentUrl={qrLogo} onUpload={setQrLogo} />
+          </div>
+
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              type="checkbox"
+              id="margin"
+              checked={includeMargin}
+              onChange={(e) => setIncludeMargin(e.target.checked)}
+              className="accent-accent"
+            />
+            <label htmlFor="margin" className="cursor-pointer text-xs text-muted-foreground">
+              Incluir margem branca
+            </label>
+          </div>
+        </div>
+
+        <Button
+          variant="secondary"
+          className="mt-4 w-full rounded-xl"
+          onClick={() => {
+            const svg = document.getElementById("qr-code-svg");
+            if (svg) {
+              const svgData = new XMLSerializer().serializeToString(svg);
+              const canvas = document.createElement("canvas");
+              const ctx = canvas.getContext("2d");
+              const img = new Image();
+              img.onload = () => {
+                canvas.width = qrSize;
+                canvas.height = qrSize;
+                ctx?.drawImage(img, 0, 0);
+                const pngFile = canvas.toDataURL("image/png");
+                const downloadLink = document.createElement("a");
+                downloadLink.download = "qrcode-nossa-historia.png";
+                downloadLink.href = pngFile;
+                downloadLink.click();
+              };
+              img.src = "data:image/svg+xml;base64," + btoa(svgData);
+            }
+          }}
+        >
+          <Upload className="h-4 w-4 rotate-180" /> Baixar PNG
+        </Button>
       </div>
     </div>
   );
 }
 
 /* -------------------- Media Upload Component -------------------- */
-function MediaUpload({ onUpload, currentUrl, type = "image" }: { 
-    onUpload: (url: string) => void; 
-    currentUrl?: string | null;
-    type?: "image" | "video" 
+function MediaUpload({
+  onUpload,
+  currentUrl,
+  type = "image",
+}: {
+  onUpload: (url: string) => void;
+  currentUrl?: string | null;
+  type?: "image" | "video";
 }) {
   const [uploading, setUploading] = useState(false);
 
@@ -203,17 +361,15 @@ function MediaUpload({ onUpload, currentUrl, type = "image" }: {
 
     setUploading(true);
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split(".").pop();
       const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('assets')
-        .upload(filePath, file);
+      const { error: uploadError } = await supabase.storage.from("assets").upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      const { data } = supabase.storage.from('assets').getPublicUrl(filePath);
+      const { data } = supabase.storage.from("assets").getPublicUrl(filePath);
       onUpload(data.publicUrl);
       toast.success("Upload concluído!");
     } catch (err) {
@@ -229,11 +385,17 @@ function MediaUpload({ onUpload, currentUrl, type = "image" }: {
       {currentUrl && (
         <div className="relative inline-block">
           {type === "image" ? (
-            <img src={currentUrl} alt="Preview" className="h-20 w-32 rounded-lg object-cover shadow-soft" />
+            <img
+              src={currentUrl}
+              alt="Preview"
+              className="h-20 w-32 rounded-lg object-cover shadow-soft"
+            />
           ) : (
-            <div className="flex h-20 w-32 items-center justify-center rounded-lg bg-white/10 text-xs border border-white/5">Vídeo</div>
+            <div className="flex h-20 w-32 items-center justify-center rounded-lg bg-white/10 text-xs border border-white/5">
+              Vídeo
+            </div>
           )}
-          <button 
+          <button
             onClick={() => onUpload("")}
             className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-white shadow-md cursor-pointer"
           >
@@ -243,9 +405,19 @@ function MediaUpload({ onUpload, currentUrl, type = "image" }: {
       )}
       <div className="flex items-center gap-2">
         <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm transition-colors hover:bg-white/10 border border-white/5">
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          {uploading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Upload className="h-4 w-4" />
+          )}
           <span>{uploading ? "Subindo..." : `Upload ${type === "image" ? "Foto" : "Vídeo"}`}</span>
-          <input type="file" accept={type === "image" ? "image/*" : "video/*"} className="hidden" onChange={handleFile} disabled={uploading} />
+          <input
+            type="file"
+            accept={type === "image" ? "image/*" : "video/*"}
+            className="hidden"
+            onChange={handleFile}
+            disabled={uploading}
+          />
         </label>
       </div>
     </div>
@@ -277,7 +449,11 @@ function TimelineEditor() {
       {(data ?? []).map((ev) => (
         <TimelineRow key={ev.id} ev={ev} onChange={refresh} />
       ))}
-      <Button onClick={add} variant="outline" className="w-full border-dashed py-10 rounded-2xl hover:bg-white/5">
+      <Button
+        onClick={add}
+        variant="outline"
+        className="w-full border-dashed py-10 rounded-2xl hover:bg-white/5"
+      >
         <Plus className="h-4 w-4" /> Adicionar momento especial
       </Button>
     </div>
@@ -317,67 +493,91 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
 
   return (
     <div className="glass space-y-4 rounded-2xl p-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">Data</label>
-            <Input
-                placeholder="Ex: 12 Jun 2023"
-                value={form.date_text}
-                onChange={(e) => setForm({ ...form, date_text: e.target.value })}
-                className="bg-white/5 rounded-xl border-white/5"
-            />
+          <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+            Data
+          </label>
+          <Input
+            placeholder="Ex: 12 Jun 2023"
+            value={form.date_text}
+            onChange={(e) => setForm({ ...form, date_text: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5"
+          />
         </div>
         <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">Título</label>
-            <Input
-                placeholder="O que aconteceu?"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                className="bg-white/5 rounded-xl border-white/5"
-            />
+          <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+            Título
+          </label>
+          <Input
+            placeholder="O que aconteceu?"
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+            Local (Opcional)
+          </label>
+          <Input
+            placeholder="Ex: Praia de Copacabana"
+            value={form.place || ""}
+            onChange={(e) => setForm({ ...form, place: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5"
+          />
         </div>
       </div>
-      
-      <div className="space-y-1">
-        <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">Descrição</label>
+
+
+        <div className="space-y-1">
+        <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+          Descrição
+        </label>
+
         <Textarea
-            placeholder="Conte os detalhes..."
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            className="bg-white/5 rounded-xl border-white/5 min-h-[100px]"
+          placeholder="Conte os detalhes..."
+          value={form.description}
+          onChange={(e) => setForm({ ...form, description: e.target.value })}
+          className="bg-white/5 rounded-xl border-white/5 min-h-[100px]"
         />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <MediaUpload 
-            type="image" 
-            currentUrl={(form as any).image_url} 
-            onUpload={(url) => setForm({ ...form, image_url: url } as any)} 
+        <MediaUpload
+          type="image"
+          currentUrl={(form as any).image_url}
+          onUpload={(url) => setForm({ ...form, image_url: url } as any)}
         />
-        <MediaUpload 
-            type="video" 
-            currentUrl={(form as any).video_url} 
-            onUpload={(url) => setForm({ ...form, video_url: url } as any)} 
+        <MediaUpload
+          type="video"
+          currentUrl={(form as any).video_url}
+          onUpload={(url) => setForm({ ...form, video_url: url } as any)}
         />
       </div>
 
       <div className="flex items-center justify-between pt-2 border-t border-white/5">
         <div className="flex gap-2">
-            <Button onClick={save} disabled={saving} size="sm" className="rounded-lg px-6">
+          <Button onClick={save} disabled={saving} size="sm" className="rounded-lg px-6">
             <Save className="h-4 w-4" /> {saving ? "Salvando..." : "Salvar"}
-            </Button>
-            <Button onClick={remove} size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive rounded-lg">
+          </Button>
+          <Button
+            onClick={remove}
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground hover:text-destructive rounded-lg"
+          >
             <Trash2 className="h-4 w-4" />
-            </Button>
+          </Button>
         </div>
         <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase text-muted-foreground">Ordem:</span>
-            <input
-                type="number"
-                value={form.sort_order}
-                onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
-                className="w-12 bg-transparent text-center text-sm outline-none"
-            />
+          <span className="text-[10px] uppercase text-muted-foreground">Ordem:</span>
+          <input
+            type="number"
+            value={form.sort_order}
+            onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
+            className="w-12 bg-transparent text-center text-sm outline-none"
+          />
         </div>
       </div>
     </div>
@@ -438,7 +638,11 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
   }
   return (
     <div className="glass grid items-center gap-4 rounded-2xl p-4 sm:grid-cols-[80px_1fr_1fr_80px_auto]">
-      <Input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} className="bg-white/5 rounded-xl border-white/5" />
+      <Input
+        value={form.icon}
+        onChange={(e) => setForm({ ...form, icon: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
       <Input
         placeholder="Rótulo"
         value={form.label}
@@ -461,7 +665,12 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
         <Button size="sm" onClick={save} className="rounded-lg">
           <Save className="h-4 w-4" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={remove} className="text-muted-foreground hover:text-destructive rounded-lg">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={remove}
+          className="text-muted-foreground hover:text-destructive rounded-lg"
+        >
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
@@ -494,7 +703,7 @@ function SettingsEditor() {
         relationship_start: form.relationship_start,
         secret_message: form.secret_message,
         hidden_video_url: form.hidden_video_url,
-        theme_mode: (form as any).theme_mode || 'romantic',
+        theme_mode: (form as any).theme_mode || "romantic",
       } as any)
       .eq("id", 1);
     if (error) toast.error(error.message);
@@ -509,35 +718,45 @@ function SettingsEditor() {
     <div className="glass space-y-6 rounded-2xl p-6">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 border-b border-white/5 pb-6">
         <div className="flex-1 space-y-1">
-            <h3 className="flex items-center gap-2 font-display text-xl">
-                <Palette className="h-5 w-5 text-accent" /> Estilo Visual
-            </h3>
-            <p className="text-xs text-muted-foreground">Escolha como a história será apresentada.</p>
+          <h3 className="flex items-center gap-2 font-display text-xl">
+            <Palette className="h-5 w-5 text-accent" /> Estilo Visual
+          </h3>
+          <p className="text-xs text-muted-foreground">Escolha como a história será apresentada.</p>
         </div>
         <div className="flex gap-2 rounded-xl bg-white/5 p-1">
-            <button
-                onClick={() => setForm({ ...form, theme_mode: "romantic" } as any)}
-                className={`rounded-lg px-4 py-2 text-xs transition-all cursor-pointer ${
-                    (form as any).theme_mode !== "soft-rose" ? "bg-primary shadow-glow" : "hover:bg-white/5"
-                }`}
-            >
-                Romantic Deep
-            </button>
-            <button
-                onClick={() => setForm({ ...form, theme_mode: "soft-rose" } as any)}
-                className={`rounded-lg px-4 py-2 text-xs transition-all cursor-pointer ${
-                    (form as any).theme_mode === "soft-rose" ? "bg-accent shadow-glow" : "hover:bg-white/5"
-                }`}
-            >
-                Soft Rose
-            </button>
+          <button
+            onClick={() => setForm({ ...form, theme_mode: "romantic" } as any)}
+            className={`rounded-lg px-4 py-2 text-xs transition-all cursor-pointer ${
+              (form as any).theme_mode !== "soft-rose"
+                ? "bg-primary shadow-glow"
+                : "hover:bg-white/5"
+            }`}
+          >
+            Romantic Deep
+          </button>
+          <button
+            onClick={() => setForm({ ...form, theme_mode: "soft-rose" } as any)}
+            className={`rounded-lg px-4 py-2 text-xs transition-all cursor-pointer ${
+              (form as any).theme_mode === "soft-rose"
+                ? "bg-accent shadow-glow"
+                : "hover:bg-white/5"
+            }`}
+          >
+            Soft Rose
+          </button>
         </div>
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">Nome dela</label>
-          <Input value={form.her_name} onChange={(e) => setForm({ ...form, her_name: e.target.value })} className="bg-white/5 rounded-xl border-white/5" />
+          <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+            Nome dela
+          </label>
+          <Input
+            value={form.her_name}
+            onChange={(e) => setForm({ ...form, her_name: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5"
+          />
         </div>
         <div className="space-y-2">
           <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
@@ -554,7 +773,9 @@ function SettingsEditor() {
         </div>
       </div>
       <div className="space-y-2">
-        <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">Carta de amor</label>
+        <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+          Carta de amor
+        </label>
         <Textarea
           rows={10}
           value={form.love_letter}
@@ -563,7 +784,9 @@ function SettingsEditor() {
         />
       </div>
       <div className="space-y-2">
-        <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">Mensagem final</label>
+        <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+          Mensagem final
+        </label>
         <Textarea
           rows={3}
           value={form.final_message}
@@ -587,22 +810,27 @@ function SettingsEditor() {
           Vídeo Escondido (Upload ou URL)
         </label>
         <div className="flex flex-col sm:flex-row gap-4 items-end">
-            <div className="flex-1 w-full">
-                <Input
-                    placeholder="URL do vídeo ou faça upload ->"
-                    value={form.hidden_video_url}
-                    onChange={(e) => setForm({ ...form, hidden_video_url: e.target.value })}
-                    className="bg-white/5 rounded-xl border-white/5"
-                />
-            </div>
-            <MediaUpload 
-                type="video" 
-                onUpload={(url) => setForm({ ...form, hidden_video_url: url })} 
+          <div className="flex-1 w-full">
+            <Input
+              placeholder="URL do vídeo ou faça upload ->"
+              value={form.hidden_video_url}
+              onChange={(e) => setForm({ ...form, hidden_video_url: e.target.value })}
+              className="bg-white/5 rounded-xl border-white/5"
             />
+          </div>
+          <MediaUpload
+            type="video"
+            onUpload={(url) => setForm({ ...form, hidden_video_url: url })}
+          />
         </div>
       </div>
-      <Button onClick={save} disabled={saving} className="w-full rounded-xl py-6 shadow-glow transition-all hover:scale-[1.01]">
-        <Save className="h-4 w-4" /> {saving ? "Salvando alterações..." : "Salvar todas as configurações"}
+      <Button
+        onClick={save}
+        disabled={saving}
+        className="w-full rounded-xl py-6 shadow-glow transition-all hover:scale-[1.01]"
+      >
+        <Save className="h-4 w-4" />{" "}
+        {saving ? "Salvando alterações..." : "Salvar todas as configurações"}
       </Button>
     </div>
   );
