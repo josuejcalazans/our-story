@@ -86,7 +86,7 @@ function Hero({ onStart, onLongPress, herName }: {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pressing, setPressing] = useState(false);
 
-  const start = () => {
+  const handlePressStart = () => {
     setPressing(true);
     timerRef.current = setTimeout(() => {
       setPressing(false);
@@ -112,10 +112,10 @@ function Hero({ onStart, onLongPress, herName }: {
           animate={{ scale: pressing ? [1, 1.3, 1.3] : [1, 1.15, 1] }}
           transition={{ duration: pressing ? 3 : 2, repeat: pressing ? 0 : Infinity, ease: "easeInOut" }}
           className="mx-auto mb-6 inline-flex select-none touch-none cursor-pointer"
-          onMouseDown={start}
+          onMouseDown={handlePressStart}
           onMouseUp={cancel}
           onMouseLeave={cancel}
-          onTouchStart={start}
+          onTouchStart={handlePressStart}
           onTouchEnd={cancel}
           onTouchCancel={cancel}
         >
@@ -131,7 +131,7 @@ function Hero({ onStart, onLongPress, herName }: {
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.97 }}
-          onClick={start}
+          onClick={onStart}
           className="group mt-12 inline-flex items-center gap-3 rounded-full bg-primary px-8 py-4 text-sm font-medium text-primary-foreground shadow-glow transition-all hover:bg-primary/90 cursor-pointer sm:text-base"
         >
           Começar nossa história
