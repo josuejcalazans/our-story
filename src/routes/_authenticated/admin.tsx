@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Trash2, Plus, LogOut, Heart, Save, Loader2, Upload, X, Eye } from "lucide-react";
+import { Trash2, Plus, LogOut, Heart, Save, Loader2, Upload, X, Eye, Palette, QrCode } from "lucide-react";
 import { useAuth } from "@/lib/use-auth";
 import {
   useTimeline,
@@ -98,20 +98,21 @@ function AdminPage() {
             <p className="text-sm text-muted-foreground">{session?.user.email}</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => setShowPreview(true)} variant="secondary" className="gap-2">
+            <Button onClick={() => setShowPreview(true)} variant="secondary" className="gap-2 rounded-xl">
                 <Eye className="h-4 w-4" /> Preview
             </Button>
-            <Button onClick={signOut} variant="outline" className="gap-2">
+            <Button onClick={signOut} variant="outline" className="gap-2 rounded-xl">
                 <LogOut className="h-4 w-4" /> Sair
             </Button>
           </div>
         </div>
 
         <Tabs defaultValue="timeline" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 rounded-xl bg-white/5 p-1">
+          <TabsList className="grid w-full grid-cols-4 rounded-xl bg-white/5 p-1">
             <TabsTrigger value="timeline" className="rounded-lg">Timeline</TabsTrigger>
             <TabsTrigger value="stats" className="rounded-lg">Estatísticas</TabsTrigger>
             <TabsTrigger value="letter" className="rounded-lg">Configurações</TabsTrigger>
+            <TabsTrigger value="share" className="rounded-lg">Compartilhar</TabsTrigger>
           </TabsList>
           <TabsContent value="timeline" className="mt-6">
             <TimelineEditor />
@@ -121,6 +122,9 @@ function AdminPage() {
           </TabsContent>
           <TabsContent value="letter" className="mt-6">
             <SettingsEditor />
+          </TabsContent>
+          <TabsContent value="share" className="mt-6">
+            <SharePanel />
           </TabsContent>
         </Tabs>
       </div>
@@ -139,7 +143,7 @@ function AdminPage() {
                 onClick={() => setShowPreview(false)} 
                 variant="destructive" 
                 size="icon" 
-                className="rounded-full shadow-glow"
+                className="rounded-full shadow-glow cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </Button>
@@ -151,6 +155,37 @@ function AdminPage() {
         )}
       </AnimatePresence>
     </main>
+  );
+}
+
+/* -------------------- Share Panel -------------------- */
+function SharePanel() {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    setUrl(window.location.origin);
+  }, []);
+
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+
+  return (
+    <div className="glass flex flex-col items-center gap-6 rounded-2xl p-8 text-center">
+      <div className="rounded-2xl bg-white p-4 shadow-glow">
+        <img src={qrUrl} alt="QR Code" className="h-48 w-48" />
+      </div>
+      <div className="space-y-2">
+        <h3 className="font-display text-2xl">Sua História está Pronta!</h3>
+        <p className="text-sm text-muted-foreground">
+          Aponte a câmera do celular para o QR Code para abrir.
+        </p>
+      </div>
+      <div className="flex w-full max-w-sm items-center gap-2 rounded-xl bg-white/5 p-2">
+        <Input value={url} readOnly className="border-none bg-transparent" />
+        <Button size="sm" onClick={() => {
+            navigator.clipboard.writeText(url);
+            toast.success("Link copiado!");
+        }} className="rounded-lg">Copiar</Button>
+      </div>
+    </div>
   );
 }
 
@@ -194,9 +229,9 @@ function MediaUpload({ onUpload, currentUrl, type = "image" }: {
       {currentUrl && (
         <div className="relative inline-block">
           {type === "image" ? (
-            <img src={currentUrl} alt="Preview" className="h-20 w-32 rounded-lg object-cover" />
+            <img src={currentUrl} alt="Preview" className="h-20 w-32 rounded-lg object-cover shadow-soft" />
           ) : (
-            <div className="flex h-20 w-32 items-center justify-center rounded-lg bg-white/10 text-xs">Vídeo</div>
+            <div className="flex h-20 w-32 items-center justify-center rounded-lg bg-white/10 text-xs border border-white/5">Vídeo</div>
           )}
           <button 
             onClick={() => onUpload("")}
@@ -207,7 +242,7 @@ function MediaUpload({ onUpload, currentUrl, type = "image" }: {
         </div>
       )}
       <div className="flex items-center gap-2">
-        <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm transition-colors hover:bg-white/10">
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm transition-colors hover:bg-white/10 border border-white/5">
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           <span>{uploading ? "Subindo..." : `Upload ${type === "image" ? "Foto" : "Vídeo"}`}</span>
           <input type="file" accept={type === "image" ? "image/*" : "video/*"} className="hidden" onChange={handleFile} disabled={uploading} />
@@ -242,7 +277,7 @@ function TimelineEditor() {
       {(data ?? []).map((ev) => (
         <TimelineRow key={ev.id} ev={ev} onChange={refresh} />
       ))}
-      <Button onClick={add} variant="outline" className="w-full border-dashed py-10">
+      <Button onClick={add} variant="outline" className="w-full border-dashed py-10 rounded-2xl hover:bg-white/5">
         <Plus className="h-4 w-4" /> Adicionar momento especial
       </Button>
     </div>
@@ -263,7 +298,6 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
         description: form.description,
         place: form.place,
         sort_order: form.sort_order,
-        // Using any because of the newly added columns not yet in types
         image_url: (form as any).image_url,
         video_url: (form as any).video_url,
       } as any)
@@ -290,7 +324,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
                 placeholder="Ex: 12 Jun 2023"
                 value={form.date_text}
                 onChange={(e) => setForm({ ...form, date_text: e.target.value })}
-                className="bg-white/5"
+                className="bg-white/5 rounded-xl border-white/5"
             />
         </div>
         <div className="space-y-1">
@@ -299,7 +333,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
                 placeholder="O que aconteceu?"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                className="bg-white/5"
+                className="bg-white/5 rounded-xl border-white/5"
             />
         </div>
       </div>
@@ -310,7 +344,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
             placeholder="Conte os detalhes..."
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            className="bg-white/5"
+            className="bg-white/5 rounded-xl border-white/5 min-h-[100px]"
         />
       </div>
 
@@ -332,7 +366,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
             <Button onClick={save} disabled={saving} size="sm" className="rounded-lg px-6">
             <Save className="h-4 w-4" /> {saving ? "Salvando..." : "Salvar"}
             </Button>
-            <Button onClick={remove} size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive">
+            <Button onClick={remove} size="sm" variant="ghost" className="text-muted-foreground hover:text-destructive rounded-lg">
             <Trash2 className="h-4 w-4" />
             </Button>
         </div>
@@ -371,7 +405,7 @@ function StatsEditor() {
       {(data ?? []).map((s) => (
         <StatRow key={s.id} s={s} onChange={refresh} />
       ))}
-      <Button onClick={add} variant="outline" className="w-full border-dashed">
+      <Button onClick={add} variant="outline" className="w-full border-dashed rounded-xl py-8">
         <Plus className="h-4 w-4" /> Adicionar estatística
       </Button>
     </div>
@@ -404,30 +438,30 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
   }
   return (
     <div className="glass grid items-center gap-4 rounded-2xl p-4 sm:grid-cols-[80px_1fr_1fr_80px_auto]">
-      <Input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} className="bg-white/5" />
+      <Input value={form.icon} onChange={(e) => setForm({ ...form, icon: e.target.value })} className="bg-white/5 rounded-xl border-white/5" />
       <Input
         placeholder="Rótulo"
         value={form.label}
         onChange={(e) => setForm({ ...form, label: e.target.value })}
-        className="bg-white/5"
+        className="bg-white/5 rounded-xl border-white/5"
       />
       <Input
         placeholder="Valor"
         value={form.value}
         onChange={(e) => setForm({ ...form, value: e.target.value })}
-        className="bg-white/5"
+        className="bg-white/5 rounded-xl border-white/5"
       />
       <Input
         type="number"
         value={form.sort_order}
         onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
-        className="bg-white/5"
+        className="bg-white/5 rounded-xl border-white/5"
       />
       <div className="flex gap-2">
         <Button size="sm" onClick={save} className="rounded-lg">
           <Save className="h-4 w-4" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={remove} className="text-muted-foreground hover:text-destructive">
+        <Button size="sm" variant="ghost" onClick={remove} className="text-muted-foreground hover:text-destructive rounded-lg">
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
@@ -437,14 +471,14 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
 
 /* -------------------- Settings (letter + secrets) -------------------- */
 function SettingsEditor() {
-  const { data, isLoading } = useSettings();
+  const { data: settings, isLoading } = useSettings();
   const qc = useQueryClient();
   const [form, setForm] = useState<SiteSettings | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (data) setForm(data);
-  }, [data]);
+    if (settings) setForm(settings);
+  }, [settings]);
 
   if (isLoading || !form) return <Loader />;
 
@@ -460,7 +494,8 @@ function SettingsEditor() {
         relationship_start: form.relationship_start,
         secret_message: form.secret_message,
         hidden_video_url: form.hidden_video_url,
-      })
+        theme_mode: (form as any).theme_mode || 'romantic',
+      } as any)
       .eq("id", 1);
     if (error) toast.error(error.message);
     else {
@@ -472,10 +507,37 @@ function SettingsEditor() {
 
   return (
     <div className="glass space-y-6 rounded-2xl p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 border-b border-white/5 pb-6">
+        <div className="flex-1 space-y-1">
+            <h3 className="flex items-center gap-2 font-display text-xl">
+                <Palette className="h-5 w-5 text-accent" /> Estilo Visual
+            </h3>
+            <p className="text-xs text-muted-foreground">Escolha como a história será apresentada.</p>
+        </div>
+        <div className="flex gap-2 rounded-xl bg-white/5 p-1">
+            <button
+                onClick={() => setForm({ ...form, theme_mode: "romantic" } as any)}
+                className={`rounded-lg px-4 py-2 text-xs transition-all cursor-pointer ${
+                    (form as any).theme_mode !== "soft-rose" ? "bg-primary shadow-glow" : "hover:bg-white/5"
+                }`}
+            >
+                Romantic Deep
+            </button>
+            <button
+                onClick={() => setForm({ ...form, theme_mode: "soft-rose" } as any)}
+                className={`rounded-lg px-4 py-2 text-xs transition-all cursor-pointer ${
+                    (form as any).theme_mode === "soft-rose" ? "bg-accent shadow-glow" : "hover:bg-white/5"
+                }`}
+            >
+                Soft Rose
+            </button>
+        </div>
+      </div>
+
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-2">
           <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">Nome dela</label>
-          <Input value={form.her_name} onChange={(e) => setForm({ ...form, her_name: e.target.value })} className="bg-white/5" />
+          <Input value={form.her_name} onChange={(e) => setForm({ ...form, her_name: e.target.value })} className="bg-white/5 rounded-xl border-white/5" />
         </div>
         <div className="space-y-2">
           <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
@@ -487,7 +549,7 @@ function SettingsEditor() {
             onChange={(e) =>
               setForm({ ...form, relationship_start: new Date(e.target.value).toISOString() })
             }
-            className="bg-white/5"
+            className="bg-white/5 rounded-xl border-white/5"
           />
         </div>
       </div>
@@ -497,7 +559,7 @@ function SettingsEditor() {
           rows={10}
           value={form.love_letter}
           onChange={(e) => setForm({ ...form, love_letter: e.target.value })}
-          className="bg-white/5"
+          className="bg-white/5 rounded-xl border-white/5 min-h-[200px]"
         />
       </div>
       <div className="space-y-2">
@@ -506,7 +568,7 @@ function SettingsEditor() {
           rows={3}
           value={form.final_message}
           onChange={(e) => setForm({ ...form, final_message: e.target.value })}
-          className="bg-white/5"
+          className="bg-white/5 rounded-xl border-white/5"
         />
       </div>
       <div className="space-y-2">
@@ -517,20 +579,20 @@ function SettingsEditor() {
           rows={2}
           value={form.secret_message}
           onChange={(e) => setForm({ ...form, secret_message: e.target.value })}
-          className="bg-white/5"
+          className="bg-white/5 rounded-xl border-white/5"
         />
       </div>
       <div className="space-y-2">
         <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
           Vídeo Escondido (Upload ou URL)
         </label>
-        <div className="flex gap-4 items-end">
-            <div className="flex-1">
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+            <div className="flex-1 w-full">
                 <Input
                     placeholder="URL do vídeo ou faça upload ->"
                     value={form.hidden_video_url}
                     onChange={(e) => setForm({ ...form, hidden_video_url: e.target.value })}
-                    className="bg-white/5"
+                    className="bg-white/5 rounded-xl border-white/5"
                 />
             </div>
             <MediaUpload 

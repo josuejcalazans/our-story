@@ -757,8 +757,10 @@ export default function OurStory() {
   const start = () => document.getElementById("story")?.scrollIntoView({ behavior: "smooth" });
   const hiddenUnlocked = unlocks["long-press"];
 
+  const themeClass = settings?.theme_mode === "soft-rose" ? "theme-soft-rose min-h-screen" : "min-h-screen";
+
   return (
-    <main className="relative">
+    <main className={`relative ${themeClass}`}>
       <Hero
         herName={herName}
         onStart={start}
