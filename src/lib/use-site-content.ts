@@ -28,6 +28,13 @@ export type SiteSettings = {
   hidden_video_url: string;
 };
 
+export type GalleryImage = {
+  id: string;
+  image_url: string;
+  caption: string | null;
+  sort_order: number;
+};
+
 export function useTimeline() {
   return useQuery({
     queryKey: ["timeline_events"],
@@ -67,6 +74,20 @@ export function useSettings() {
         .maybeSingle();
       if (error) throw error;
       return data as SiteSettings | null;
+    },
+  });
+}
+
+export function useGallery() {
+  return useQuery({
+    queryKey: ["gallery_images"],
+    queryFn: async (): Promise<GalleryImage[]> => {
+      const { data, error } = await supabase
+        .from("gallery_images")
+        .select("*")
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data as GalleryImage[];
     },
   });
 }
