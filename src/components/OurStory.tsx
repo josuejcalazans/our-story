@@ -377,7 +377,7 @@ function Gallery() {
 function VideoMessage({ hiddenUnlocked, hiddenVideoUrl }: { hiddenUnlocked: boolean; hiddenVideoUrl: string }) {
   const [playing, setPlaying] = useState(false);
   return (
-    <SectionShell>
+    <SectionShell id="video-section">
       <SectionTitle eyebrow="Capítulo 06" title="Uma mensagem pra você" />
       <div className="mx-auto mt-10 max-w-3xl">
         <div className="glass relative aspect-video overflow-hidden rounded-3xl shadow-glow">
@@ -614,11 +614,12 @@ function FinalSurprise({ finalMessage }: { finalMessage: string }) {
 }
 
 /* ------------------------- Secret modal ------------------------- */
-function SecretModal({ open, onClose, message, kind }: {
+function SecretModal({ open, onClose, message, kind, onAction }: {
   open: boolean;
   onClose: () => void;
   message: string;
   kind: "secret" | "video";
+  onAction?: () => void;
 }) {
   return (
     <AnimatePresence>
@@ -649,9 +650,15 @@ function SecretModal({ open, onClose, message, kind }: {
             </h3>
             <p className="mt-6 font-letter text-xl italic leading-relaxed">{message}</p>
             {kind === "video" && (
-              <p className="mt-4 text-xs text-muted-foreground">
-                Toque no capítulo 06 para assistir.
-              </p>
+              <button
+                onClick={() => {
+                  onAction?.();
+                  onClose();
+                }}
+                className="mt-4 text-xs text-muted-foreground hover:text-accent underline cursor-pointer transition-colors"
+              >
+                Toque aqui para ir ao capítulo 06 e assistir.
+              </button>
             )}
           </motion.div>
         </motion.div>
@@ -661,9 +668,9 @@ function SecretModal({ open, onClose, message, kind }: {
 }
 
 /* ------------------------- Shared shells ------------------------- */
-function SectionShell({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function SectionShell({ children, className = "", id }: { children: React.ReactNode; className?: string; id?: string }) {
   return (
-    <section className={`relative mx-auto w-full max-w-5xl px-6 py-24 sm:py-32 ${className}`}>
+    <section id={id} className={`relative mx-auto w-full max-w-5xl px-6 py-24 sm:py-32 ${className}`}>
       {children}
     </section>
   );
@@ -791,8 +798,11 @@ export default function OurStory() {
       <SecretModal
         open={modal.open}
         onClose={() => setModal({ ...modal, open: false })}
+        onAction={() => {
+          document.getElementById("video-section")?.scrollIntoView({ behavior: "smooth" });
+        }}
         message={modal.kind === "video"
-          ? "Você desbloqueou o vídeo escondido. Role até o capítulo 06."
+          ? "Você desbloqueou o vídeo escondido."
           : secretMessage}
         kind={modal.kind}
       />
