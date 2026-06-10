@@ -32,13 +32,24 @@ import { useQueryClient } from "@tanstack/react-query";
 import OurStory from "@/components/OurStory";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
+import { z } from "zod";
+
+const adminSearchSchema = z.object({
+  tab: z
+    .enum(["timeline", "stats", "letter", "share"])
+    .optional()
+    .default("timeline"),
+});
 
 export const Route = createFileRoute("/_authenticated/admin")({
+  validateSearch: (search) => adminSearchSchema.parse(search),
   component: AdminPage,
 });
 
 function AdminPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
+  const activeTab = search.tab;
   const { session, isAdmin, loading } = useAuth();
   const [grantingSelf, setGrantingSelf] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -124,7 +135,16 @@ function AdminPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="timeline" className="w-full">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            navigate({
+              search: (prev) => ({ ...prev, tab: value as any }),
+              replace: true,
+            })
+          }
+          className="w-full"
+        >
           <TabsList className="grid w-full grid-cols-4 rounded-xl bg-white/5 p-1">
             <TabsTrigger value="timeline" className="rounded-lg">
               Timeline
