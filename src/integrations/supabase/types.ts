@@ -38,35 +38,113 @@ export type Database = {
         }
         Relationships: []
       }
+      memory_envelopes: {
+        Row: {
+          created_at: string
+          icon: string
+          icon_name: string
+          id: string
+          is_easter_egg: boolean
+          message: string
+          slug: string | null
+          sort_order: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          icon?: string
+          icon_name?: string
+          id?: string
+          is_easter_egg?: boolean
+          message: string
+          slug?: string | null
+          sort_order?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          icon?: string
+          icon_name?: string
+          id?: string
+          is_easter_egg?: boolean
+          message?: string
+          slug?: string | null
+          sort_order?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      places: {
+        Row: {
+          created_at: string
+          icon: string
+          icon_name: string
+          id: string
+          sort_order: number
+          subtitle: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          icon?: string
+          icon_name?: string
+          id?: string
+          sort_order?: number
+          subtitle: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          icon?: string
+          icon_name?: string
+          id?: string
+          sort_order?: number
+          subtitle?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       site_settings: {
         Row: {
+          access_date: string | null
           final_message: string
           her_name: string
           hidden_video_url: string
           id: number
           love_letter: string
+          page_gate_enabled: boolean
           relationship_start: string
           secret_message: string
           theme_mode: string | null
           updated_at: string
         }
         Insert: {
+          access_date?: string | null
           final_message?: string
           her_name?: string
           hidden_video_url?: string
           id?: number
           love_letter?: string
+          page_gate_enabled?: boolean
           relationship_start?: string
           secret_message?: string
           theme_mode?: string | null
           updated_at?: string
         }
         Update: {
+          access_date?: string | null
           final_message?: string
           her_name?: string
           hidden_video_url?: string
           id?: number
           love_letter?: string
+          page_gate_enabled?: boolean
           relationship_start?: string
           secret_message?: string
           theme_mode?: string | null
@@ -78,6 +156,7 @@ export type Database = {
         Row: {
           created_at: string
           icon: string
+          icon_name: string | null
           id: string
           label: string
           sort_order: number
@@ -87,6 +166,7 @@ export type Database = {
         Insert: {
           created_at?: string
           icon: string
+          icon_name?: string | null
           id?: string
           label: string
           sort_order?: number
@@ -96,6 +176,7 @@ export type Database = {
         Update: {
           created_at?: string
           icon?: string
+          icon_name?: string | null
           id?: string
           label?: string
           sort_order?: number
@@ -109,6 +190,7 @@ export type Database = {
           created_at: string
           date_text: string
           description: string
+          icon_name: string | null
           id: string
           image_url: string | null
           place: string | null
@@ -121,6 +203,7 @@ export type Database = {
           created_at?: string
           date_text: string
           description: string
+          icon_name?: string | null
           id?: string
           image_url?: string | null
           place?: string | null
@@ -133,6 +216,7 @@ export type Database = {
           created_at?: string
           date_text?: string
           description?: string
+          icon_name?: string | null
           id?: string
           image_url?: string | null
           place?: string | null
