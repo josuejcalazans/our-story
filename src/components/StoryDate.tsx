@@ -1,8 +1,8 @@
-import { forwardRef, useEffect, useMemo, useState } from "react";
-import { CalendarHeart, Clock3 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarHeart, ChevronDown, Clock3 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   formatStoryDateLong,
@@ -89,34 +89,40 @@ export function StoryDateDisplay({
   );
 }
 
-/* ------------------------- Pickers ------------------------- */
+/* ------------------------- Inline calendar (sem popover — mais confiável no painel) ------------------------- */
 
-const StoryDateTrigger = forwardRef<
-  HTMLButtonElement,
-  {
-    children?: React.ReactNode;
-    className?: string;
-    emptyLabel?: string;
-  }
->(function StoryDateTrigger({ children, className, emptyLabel }, ref) {
+function InlineCalendarPanel({
+  selected,
+  onSelect,
+  footer,
+  className,
+}: {
+  selected?: Date;
+  onSelect: (date: Date) => void;
+  footer?: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <button
-      ref={ref}
-      type="button"
+    <div
       className={cn(
-        "flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left transition-all hover:border-primary/30 hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer",
+        "overflow-hidden rounded-2xl border border-white/10 bg-card shadow-glow",
         className,
       )}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20">
-        <CalendarHeart className="h-4 w-4" aria-hidden />
-      </div>
-      <div className="min-w-0 flex-1">
-        {children ?? <span className="text-sm text-muted-foreground">{emptyLabel}</span>}
-      </div>
-    </button>
+      <Calendar
+        mode="single"
+        selected={selected}
+        defaultMonth={selected}
+        onSelect={(date) => {
+          if (date) onSelect(toCalendarDate(date));
+        }}
+        locale={ptBR}
+        className="rounded-2xl p-3"
+      />
+      {footer}
+    </div>
   );
-});
+}
 
 export function StoryDatePicker({
   value,
@@ -150,12 +156,12 @@ export function StoryDatePicker({
       : formatStoryDateLong(parsed)
     : null;
 
-  function pickDate(date: Date) {
-    const day = toCalendarDate(date);
+  function pickDate(day: Date) {
     if (mode === "datetime") {
       onChange(isoFromDateAndTime(day, hours, minutes));
     } else {
       onChange(toDateOnlyString(day));
+      setOpen(false);
     }
   }
 
@@ -165,80 +171,81 @@ export function StoryDatePicker({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <StoryDateTrigger className={className} emptyLabel={placeholder}>
+    <div className={cn("space-y-2", className)}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left transition-all hover:border-primary/30 hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer"
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20">
+          <CalendarHeart className="h-4 w-4" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
           {label ? (
-            <div>
+            <>
               <p className="truncate text-sm font-medium text-foreground">{label}</p>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                {mode === "datetime" ? "Data e hora do começo" : "Toque para alterar"}
+                {open ? "Fechar calendário" : mode === "datetime" ? "Data e hora do começo" : "Toque para alterar"}
               </p>
-            </div>
-          ) : null}
-        </StoryDateTrigger>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="z-[200] w-auto rounded-2xl border-white/10 bg-card p-0 shadow-glow backdrop-blur-xl"
-      >
-        <Calendar
-          mode="single"
-          selected={calendarSelected}
-          defaultMonth={calendarSelected}
-          onSelect={(date) => {
-            if (!date) return;
-            pickDate(date);
-            if (mode === "date") setOpen(false);
-          }}
-          locale={ptBR}
-          className="rounded-2xl"
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground">{placeholder}</span>
+          )}
+        </div>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+          aria-hidden
         />
-        {mode === "datetime" && (
-          <div className="flex items-center gap-3 border-t border-white/10 px-4 py-3">
-            <Clock3 className="h-4 w-4 text-accent" aria-hidden />
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={0}
-                max={23}
-                value={hours}
-                onChange={(e) => {
-                  const h = Math.min(23, Math.max(0, Number(e.target.value) || 0));
-                  setHours(h);
-                  applyTime(h, minutes);
-                }}
-                className="h-9 w-14 rounded-lg border-white/10 bg-white/5 text-center"
-              />
-              <span className="text-muted-foreground">:</span>
-              <Input
-                type="number"
-                min={0}
-                max={59}
-                value={minutes}
-                onChange={(e) => {
-                  const m = Math.min(59, Math.max(0, Number(e.target.value) || 0));
-                  setMinutes(m);
-                  applyTime(hours, m);
-                }}
-                className="h-9 w-14 rounded-lg border-white/10 bg-white/5 text-center"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="ml-auto text-xs text-primary hover:underline cursor-pointer"
-            >
-              Pronto
-            </button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+      </button>
+
+      {open && (
+        <InlineCalendarPanel
+          selected={calendarSelected}
+          onSelect={pickDate}
+          footer={
+            mode === "datetime" ? (
+              <div className="flex items-center gap-3 border-t border-white/10 px-4 py-3">
+                <Clock3 className="h-4 w-4 text-accent" aria-hidden />
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={23}
+                    value={hours}
+                    onChange={(e) => {
+                      const h = Math.min(23, Math.max(0, Number(e.target.value) || 0));
+                      setHours(h);
+                      applyTime(h, minutes);
+                    }}
+                    className="h-9 w-14 rounded-lg border-white/10 bg-white/5 text-center"
+                  />
+                  <span className="text-muted-foreground">:</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={59}
+                    value={minutes}
+                    onChange={(e) => {
+                      const m = Math.min(59, Math.max(0, Number(e.target.value) || 0));
+                      setMinutes(m);
+                      applyTime(hours, m);
+                    }}
+                    className="h-9 w-14 rounded-lg border-white/10 bg-white/5 text-center"
+                  />
+                </div>
+                <Button type="button" size="sm" onClick={() => setOpen(false)} className="ml-auto rounded-lg">
+                  Pronto
+                </Button>
+              </div>
+            ) : undefined
+          }
+        />
+      )}
+    </div>
   );
 }
 
-/** Timeline admin: calendário + texto livre formatado em PT. */
+/** Timeline admin: calendário inline + texto livre. */
 export function StoryDateTextPicker({
   value,
   onChange,
@@ -254,39 +261,37 @@ export function StoryDateTextPicker({
 
   return (
     <div className={cn("space-y-3", className)}>
-      {value && parsed && (
-        <StoryDateDisplay value={value} size="sm" />
+      {value && parsed && <StoryDateDisplay value={value} size="sm" />}
+
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left transition-all hover:border-primary/30 hover:bg-white/[0.07] cursor-pointer"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20">
+            <CalendarHeart className="h-4 w-4" aria-hidden />
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {open ? "Fechar calendário" : "Alterar pelo calendário"}
+          </span>
+        </div>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+          aria-hidden
+        />
+      </button>
+
+      {open && (
+        <InlineCalendarPanel
+          selected={calendarSelected}
+          onSelect={(day) => {
+            onChange(formatStoryDateShort(day));
+            setOpen(false);
+          }}
+        />
       )}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <StoryDateTrigger emptyLabel="Escolher data no calendário">
-            {value && !parsed ? (
-              <p className="truncate text-sm font-medium">{value}</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {value ? "Alterar pelo calendário" : "Abrir calendário"}
-              </p>
-            )}
-          </StoryDateTrigger>
-        </PopoverTrigger>
-        <PopoverContent
-          align="start"
-          className="z-[200] w-auto rounded-2xl border-white/10 bg-card p-0 shadow-glow backdrop-blur-xl"
-        >
-          <Calendar
-            mode="single"
-            selected={calendarSelected}
-            defaultMonth={calendarSelected}
-            onSelect={(date) => {
-              if (!date) return;
-              onChange(formatStoryDateShort(toCalendarDate(date)));
-              setOpen(false);
-            }}
-            locale={ptBR}
-            className="rounded-2xl"
-          />
-        </PopoverContent>
-      </Popover>
+
       <Input
         placeholder="Ou digite: 12 jun 2023"
         value={value}

@@ -1189,10 +1189,6 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
   const [form, setForm] = useState(ev);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    setForm(ev);
-  }, [ev]);
-
   async function save() {
     setSaving(true);
     const { error } = await supabase
