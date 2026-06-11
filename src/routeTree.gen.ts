@@ -9,11 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as OgDotsvgRouteImport } from './routes/og[.]svg'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedHeartPanelRouteImport } from './routes/_authenticated/heart-panel'
 
+const OgDotsvgRoute = OgDotsvgRouteImport.update({
+  id: '/og.svg',
+  path: '/og.svg',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -37,11 +43,13 @@ const AuthenticatedHeartPanelRoute = AuthenticatedHeartPanelRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/og.svg': typeof OgDotsvgRoute
   '/heart-panel': typeof AuthenticatedHeartPanelRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/og.svg': typeof OgDotsvgRoute
   '/heart-panel': typeof AuthenticatedHeartPanelRoute
 }
 export interface FileRoutesById {
@@ -49,18 +57,20 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/og.svg': typeof OgDotsvgRoute
   '/_authenticated/heart-panel': typeof AuthenticatedHeartPanelRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/heart-panel'
+  fullPaths: '/' | '/auth' | '/og.svg' | '/heart-panel'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/heart-panel'
+  to: '/' | '/auth' | '/og.svg' | '/heart-panel'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/og.svg'
     | '/_authenticated/heart-panel'
   fileRoutesById: FileRoutesById
 }
@@ -68,10 +78,18 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  OgDotsvgRoute: typeof OgDotsvgRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/og.svg': {
+      id: '/og.svg'
+      path: '/og.svg'
+      fullPath: '/og.svg'
+      preLoaderRoute: typeof OgDotsvgRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -118,6 +136,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  OgDotsvgRoute: OgDotsvgRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
