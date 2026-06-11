@@ -108,7 +108,7 @@ const adminSearchSchema = z.object({
   tab: z.enum(["timeline", "stats", "gallery", "letter", "share"]).optional().default("timeline"),
 });
 
-export const Route = createFileRoute("/_authenticated/admin")({
+export const Route = createFileRoute("/_authenticated/heart-panel")({
   validateSearch: (search) => adminSearchSchema.parse(search),
   component: AdminPage,
 });

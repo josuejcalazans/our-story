@@ -21,7 +21,7 @@ function AuthPage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/admin" });
+      if (data.session) navigate({ to: "/heart-panel" });
     });
   }, [navigate]);
 
@@ -33,7 +33,7 @@ function AuthPage() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin + "/admin" },
+          options: { emailRedirectTo: window.location.origin + "/heart-panel" },
         });
         if (error) throw error;
         toast.success("Conta criada. Você já pode entrar.");
@@ -41,7 +41,7 @@ function AuthPage() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate({ to: "/admin" });
+        navigate({ to: "/heart-panel" });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro");
