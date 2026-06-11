@@ -6,10 +6,11 @@ import { useHeartbeatSound } from "@/hooks/use-heartbeat-sound";
 import { unlockHeartbeatAudio } from "@/lib/heartbeat-audio-session";
 import {
   CINEMATIC_HEART_MS,
-  cycleMsToBpm,
+  getCinematicHeartbeatBpm,
+  getCinematicHeartbeatCycleMs,
+  getHeartGlowIntensity,
   getHeartPulseScale,
   getHeartbeatAudioStopAtMs,
-  getHeartbeatCycleMs,
   HEARTBEAT_INITIAL_FLAT_MS,
   STORY_LOADER_MIN_MS,
 } from "@/lib/heartbeat-loader-timing";
@@ -17,11 +18,12 @@ import { fadeOutHeartbeatAudioSession } from "@/lib/heartbeat-audio-session";
 
 export { STORY_LOADER_MIN_MS };
 
-const STAGE_1_MS = 2500;
-const STAGE_2_MS = 8000;
-const STAGE_3_MS = 5000;
-const STAGE_4_MS = 3500;
-const STAGE_5_MS = 3200;
+/** 0s silêncio → 2s primeiro batimento → 5s ECG → 8s acelera → 12s flash */
+const STAGE_1_MS = 2000;
+const STAGE_2_MS = 3000;
+const STAGE_3_MS = 3000;
+const STAGE_4_MS = 4000;
+const STAGE_5_MS = 2800;
 const STAGE_6_MS = 10000;
 
 const EMOTIONAL_PHRASES = [
@@ -32,9 +34,6 @@ const EMOTIONAL_PHRASES = [
 ] as const;
 
 const BEAT_LINES = [
-  { key: "title", text: "Primeiro batimento", className: "text-[11px] uppercase tracking-[0.35em] text-secondary" },
-  { key: "lub", text: "lub... dub...", className: "font-display text-2xl text-glow sm:text-3xl" },
-  { key: "grow", text: "O coração cresce junto com o som.", className: "font-letter text-lg italic text-muted-foreground sm:text-xl" },
   { key: "stronger", text: "Algo está batendo mais forte...", className: "font-letter text-lg italic text-muted-foreground sm:text-xl" },
 ] as const;
 
@@ -95,6 +94,7 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
   const [beatLine, setBeatLine] = useState(0);
   const [phraseIdx, setPhraseIdx] = useState(0);
   const [flash, setFlash] = useState(false);
+  const [currentBpm, setCurrentBpm] = useState(55);
 
   const heartActive = stage >= 2 && stage <= 4;
   const { elapsedMs, getElapsedMs } = useLoaderElapsedMs(heartActive);
@@ -109,6 +109,8 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
   playBeatRef.current = playBeat;
   const completedRef = useRef(false);
   const fadingRef = useRef(false);
+
+  const glowIntensity = getHeartGlowIntensity(currentBpm);
 
   useEffect(() => {
     const unlock = () => void unlockHeartbeatAudio();
@@ -126,9 +128,9 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
       return;
     }
     const timers = [
-      setTimeout(() => setBeatLine(1), 1800),
-      setTimeout(() => setBeatLine(2), 4200),
-      setTimeout(() => setBeatLine(3), 6600),
+      setTimeout(() => setBeatLine(1), 400),
+      setTimeout(() => setBeatLine(2), 1200),
+      setTimeout(() => setBeatLine(3), 2200),
     ];
     return () => timers.forEach(clearTimeout);
   }, [stage]);
@@ -154,7 +156,6 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
 
   useEffect(() => {
     if (stage !== 4 || fadingRef.current) return;
-
     if (elapsedMs < audioStopAtMs) return;
 
     fadingRef.current = true;
@@ -163,7 +164,7 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
       setTimeout(() => {
         setFlash(false);
         setStage(5);
-      }, 450);
+      }, 500);
     });
   }, [stage, elapsedMs, audioStopAtMs, fadeOut]);
 
@@ -194,14 +195,15 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
       const elapsed = getElapsedMs();
       if (elapsed >= audioStopAtMs) return;
 
-      const cycleMs = getHeartbeatCycleMs(elapsed, CINEMATIC_HEART_MS);
-      const bpm = cycleMsToBpm(cycleMs);
+      const bpm = getCinematicHeartbeatBpm(elapsed);
+      const cycleMs = getCinematicHeartbeatCycleMs(elapsed);
+      setCurrentBpm(bpm);
       setBeatKey((k) => k + 1);
       setRippleKey((k) => k + 1);
       setHeartScale(getHeartPulseScale(bpm));
-      setTimeout(() => setHeartScale(1), 90);
+      setTimeout(() => setHeartScale(1), 100);
 
-      if (!cancelled && elapsed < audioStopAtMs) playBeatRef.current(bpm);
+      if (!cancelled && elapsed < audioStopAtMs) playBeatRef.current(bpm, true);
       if (cancelled) return;
       beatTimeout = setTimeout(scheduleNext, cycleMs);
     };
@@ -215,7 +217,7 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
 
   useEffect(() => () => void fadeOutHeartbeatAudioSession(), []);
 
-  const showEcg = stage === 3;
+  const showEcg = stage >= 3 && stage <= 4;
   const subtitle =
     stage === 3
       ? "Parece que alguém está chegando..."
@@ -229,8 +231,8 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
       {flash && (
         <motion.div
           initial={{ opacity: 0 }}
-          animate={{ opacity: [0, 0.85, 0] }}
-          transition={{ duration: 0.45 }}
+          animate={{ opacity: [0, 0.9, 0] }}
+          transition={{ duration: 0.5 }}
           className="pointer-events-none absolute inset-0 z-40 bg-white"
         />
       )}
@@ -248,27 +250,32 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
               <div
                 className="relative flex h-28 w-28 shrink-0 items-center justify-center"
                 style={{
-                  transform: `scale(${stage === 1 ? 1.08 : heartScale})`,
+                  transform: `scale(${stage === 1 ? 1.06 : heartScale})`,
                   transition: "transform 0.14s ease-out",
                 }}
               >
                 <motion.div
-                  animate={stage === 1 ? { scale: [1, 1.1, 1] } : undefined}
+                  animate={stage === 1 ? { scale: [1, 1.08, 1] } : undefined}
                   transition={
                     stage === 1
-                      ? { duration: 1.6, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }
+                      ? { duration: 1.8, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }
                       : undefined
                   }
                 >
-                  <Heart className="h-14 w-14 fill-accent text-accent drop-shadow-[0_0_32px_rgba(236,72,153,0.55)]" />
+                  <Heart
+                    className="h-14 w-14 fill-accent text-accent transition-[filter] duration-300"
+                    style={{
+                      filter: `drop-shadow(0 0 ${20 + glowIntensity * 40}px rgba(236,72,153,${0.45 + glowIntensity * 0.5}))`,
+                    }}
+                  />
                 </motion.div>
                 {stage >= 2 && (
                   <motion.span
                     key={rippleKey}
                     className="absolute inset-0 rounded-full border border-accent/40"
                     initial={{ scale: 0.9, opacity: 0.5 }}
-                    animate={{ scale: 2, opacity: 0 }}
-                    transition={{ duration: 0.7 }}
+                    animate={{ scale: 2.2, opacity: 0 }}
+                    transition={{ duration: 0.75 }}
                   />
                 )}
               </div>
@@ -281,7 +288,7 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -8 }}
-                      transition={{ duration: 0.6 }}
+                      transition={{ duration: 0.55 }}
                       className={BEAT_LINES[beatLine].className}
                     >
                       {BEAT_LINES[beatLine].text}
@@ -303,9 +310,9 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
 
               {showEcg && (
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.8 }}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.9 }}
                   className="mt-8 flex w-full justify-center"
                 >
                   <EcgContinuousLine
@@ -313,6 +320,7 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
                     beatKey={beatKey}
                     running={running}
                     totalMs={CINEMATIC_HEART_MS}
+                    bpm={currentBpm}
                   />
                 </motion.div>
               )}
