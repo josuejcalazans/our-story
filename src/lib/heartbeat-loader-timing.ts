@@ -12,13 +12,6 @@ export const HEARTBEAT_CYCLE_SLOW_MS = 820;
 /** Fim em corrida — tutututu */
 export const HEARTBEAT_CYCLE_FAST_MS = 155;
 
-const LUB_IN_CYCLE = 0.12;
-const DUB_IN_CYCLE = 0.34;
-
-const BASELINE_Y = 28;
-
-export type BeatPulse = { atMs: number; kind: "lub" | "dub" };
-
 export function getHeartbeatCycleMs(elapsedMs: number): number {
   if (elapsedMs < HEARTBEAT_ACCELERATE_AT_MS) return HEARTBEAT_CYCLE_SLOW_MS;
 
@@ -32,124 +25,11 @@ export function getHeartbeatCycleMs(elapsedMs: number): number {
   );
 }
 
-/** Posição na linha = tempo (batimentos e desenho no mesmo lugar) */
-export function getEcgDrawProgress(elapsedMs: number): number {
-  if (elapsedMs >= STORY_LOADER_MIN_MS) return 1;
-  if (elapsedMs <= 0) return 0;
-  return elapsedMs / STORY_LOADER_MIN_MS;
+export function cycleMsToBpm(cycleMs: number): number {
+  return 60000 / cycleMs;
 }
 
-export function timeToPathX(ms: number, pathWidth: number): number {
-  return (ms / STORY_LOADER_MIN_MS) * pathWidth;
-}
-
-export function buildBeatSchedule(durationMs = STORY_LOADER_MIN_MS): BeatPulse[] {
-  const pulses: BeatPulse[] = [];
-  let cycleStart = HEARTBEAT_INITIAL_FLAT_MS;
-
-  while (cycleStart < durationMs) {
-    const cycleMs = getHeartbeatCycleMs(cycleStart);
-    const lubAt = cycleStart + LUB_IN_CYCLE * cycleMs;
-    const dubAt = cycleStart + DUB_IN_CYCLE * cycleMs;
-    if (lubAt < durationMs) pulses.push({ atMs: lubAt, kind: "lub" });
-    if (dubAt < durationMs) pulses.push({ atMs: dubAt, kind: "dub" });
-    cycleStart += cycleMs;
-  }
-
-  return pulses.sort((a, b) => a.atMs - b.atMs);
-}
-
-function beatWidthPx(
-  lubs: BeatPulse[],
-  index: number,
-  pathWidth: number,
-): number {
-  const lub = lubs[index];
-  if (!lub) return 48;
-  const cx = timeToPathX(lub.atMs, pathWidth);
-  const next = lubs[index + 1];
-  if (!next) return Math.min(72, Math.max(28, pathWidth - cx - 4));
-  const nextCx = timeToPathX(next.atMs, pathWidth);
-  const gap = nextCx - cx;
-  return Math.max(16, Math.min(72, gap * 0.82));
-}
-
-/** Complexo P → QRS → T — pico principal (R) em cx = instante do lub */
-function appendEcgComplex(cx: number, w: number): string {
-  const y = BASELINE_Y;
-  const x = (f: number) => (cx + f * w).toFixed(1);
-
-  return [
-    `H${x(-0.5)}`,
-    `L${x(-0.38)} ${y - 3}`,
-    `L${x(-0.28)} ${y}`,
-    `L${x(-0.16)} ${y + 3}`,
-    `L${x(-0.05)} ${y - 22}`,
-    `L${x(0)} ${y + 18}`,
-    `L${x(0.08)} ${y}`,
-    `L${x(0.16)} ${y - 4}`,
-    `L${x(0.26)} ${y}`,
-  ].join(" ");
-}
-
-/** Linha contínua: baseline plana, picos alinhados ao tempo de cada lub */
-export function buildEcgPath(schedule: BeatPulse[], pathWidth = 1000): string {
-  const lubs = schedule.filter((b) => b.kind === "lub");
-  if (lubs.length === 0) return `M 0 ${BASELINE_Y} H ${pathWidth}`;
-
-  const first = lubs[0];
-  if (!first) return `M 0 ${BASELINE_Y} H ${pathWidth}`;
-
-  const firstCx = timeToPathX(first.atMs, pathWidth);
-  const firstW = beatWidthPx(lubs, 0, pathWidth);
-
-  let d = `M 0 ${BASELINE_Y} H ${Math.max(0, firstCx - firstW * 0.52).toFixed(1)}`;
-
-  for (let i = 0; i < lubs.length; i++) {
-    const lub = lubs[i];
-    if (!lub) continue;
-    const cx = timeToPathX(lub.atMs, pathWidth);
-    const w = beatWidthPx(lubs, i, pathWidth);
-    d += appendEcgComplex(cx, w);
-
-    const next = lubs[i + 1];
-    if (next) {
-      const nextCx = timeToPathX(next.atMs, pathWidth);
-      const nextW = beatWidthPx(lubs, i + 1, pathWidth);
-      const flatEnd = nextCx - nextW * 0.52;
-      const complexEnd = cx + w * 0.28;
-      if (flatEnd > complexEnd + 1) {
-        d += ` H ${flatEnd.toFixed(1)}`;
-      }
-    }
-  }
-
-  d += ` H ${pathWidth}`;
-  return d;
-}
-
-export function getHeartScale(elapsedMs: number, schedule: BeatPulse[]): number {
-  let scale = 1;
-
-  for (const pulse of schedule) {
-    const dt = elapsedMs - pulse.atMs;
-    const fast = pulse.atMs >= HEARTBEAT_ACCELERATE_AT_MS;
-    const window = pulse.kind === "lub" ? (fast ? 120 : 280) : fast ? 90 : 200;
-    const peak = pulse.kind === "lub" ? 0.28 : 0.12;
-    if (dt < 0 || dt > window) continue;
-    const x = dt / window;
-    const bump = peak * Math.sin(Math.PI * x) * (1 - x * 0.35);
-    scale = Math.max(scale, 1 + bump);
-  }
-
-  return scale;
-}
-
-export function getLubDubOffsetsSec(cycleMs: number) {
-  const cycleSec = cycleMs / 1000;
-  return {
-    cycleSec,
-    lubAtSec: LUB_IN_CYCLE * cycleSec,
-    dubAtSec: DUB_IN_CYCLE * cycleSec,
-  };
+/** Escala do coração no pico — mesma curva do demo */
+export function getHeartPulseScale(bpm: number): number {
+  return 1 + 0.2 * Math.min(bpm / 120, 1.5);
 }

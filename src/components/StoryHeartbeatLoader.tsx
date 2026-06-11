@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Volume2, VolumeX } from "lucide-react";
 import EcgContinuousLine from "@/components/EcgContinuousLine";
 import { useHeartbeatSound } from "@/hooks/use-heartbeat-sound";
 import {
-  buildBeatSchedule,
-  getHeartScale,
+  cycleMsToBpm,
+  getHeartPulseScale,
+  getHeartbeatCycleMs,
   HEARTBEAT_ACCELERATE_AT_MS,
+  HEARTBEAT_INITIAL_FLAT_MS,
   STORY_LOADER_MIN_MS,
 } from "@/lib/heartbeat-loader-timing";
 
@@ -37,28 +39,53 @@ export default function StoryHeartbeatLoader({
   sound?: boolean;
 }) {
   const { elapsedMs, getElapsedMs } = useLoaderElapsedMs();
-  const beatSchedule = useMemo(() => buildBeatSchedule(), []);
-  const heartScale = getHeartScale(elapsedMs, beatSchedule);
+  const running = elapsedMs < STORY_LOADER_MIN_MS;
   const accelerating = elapsedMs >= HEARTBEAT_ACCELERATE_AT_MS;
 
-  const lastLubRef = useRef(-1);
+  const [beatKey, setBeatKey] = useState(0);
+  const [heartScale, setHeartScale] = useState(1);
   const [rippleKey, setRippleKey] = useState(0);
 
-  useEffect(() => {
-    const lubs = beatSchedule.filter((b) => b.kind === "lub");
-    for (let i = 0; i < lubs.length; i++) {
-      const lub = lubs[i];
-      if (!lub) continue;
-      if (elapsedMs >= lub.atMs && elapsedMs < lub.atMs + 60 && lastLubRef.current !== i) {
-        lastLubRef.current = i;
-        setRippleKey(i);
-        break;
-      }
-    }
-  }, [elapsedMs, beatSchedule]);
+  const { muted, unlocked, needsTap, mute, unmuteFromGesture, unlockFromGesture, playBeat } =
+    useHeartbeatSound(sound);
 
-  const { muted, unlocked, needsTap, mute, unmuteFromGesture, unlockFromGesture } =
-    useHeartbeatSound(getElapsedMs, sound);
+  const playBeatRef = useRef(playBeat);
+  playBeatRef.current = playBeat;
+
+  /** Agenda batimentos com setTimeout — mesma fórmula do demo */
+  useEffect(() => {
+    if (!running) return;
+
+    let beatTimeout: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const elapsed = getElapsedMs();
+      if (elapsed >= STORY_LOADER_MIN_MS) return;
+
+      const cycleMs = getHeartbeatCycleMs(elapsed);
+      const bpm = cycleMsToBpm(cycleMs);
+
+      setBeatKey((k) => k + 1);
+      setRippleKey((k) => k + 1);
+
+      const scale = getHeartPulseScale(bpm);
+      setHeartScale(scale);
+      setTimeout(() => setHeartScale(1), 85);
+
+      playBeatRef.current(bpm);
+
+      beatTimeout = setTimeout(scheduleNext, cycleMs);
+    };
+
+    beatTimeout = setTimeout(scheduleNext, HEARTBEAT_INITIAL_FLAT_MS);
+
+    return () => {
+      cancelled = true;
+      if (beatTimeout) clearTimeout(beatTimeout);
+    };
+  }, [running, getElapsedMs]);
 
   const handleUnlock = useCallback(() => {
     if (sound && !muted) unlockFromGesture();
@@ -91,7 +118,11 @@ export default function StoryHeartbeatLoader({
       <div className="relative z-10 flex flex-col items-center gap-10 px-6">
         <div
           className="relative flex h-20 w-20 items-center justify-center"
-          style={{ transform: `scale(${heartScale})`, willChange: "transform" }}
+          style={{
+            transform: `scale(${heartScale})`,
+            transition: heartScale > 1 ? "transform 0.07s ease-out" : "transform 0.2s ease-in",
+            willChange: "transform",
+          }}
         >
           <Heart className="relative z-10 h-12 w-12 fill-accent text-accent drop-shadow-[0_0_28px_oklch(0.74_0.21_350_/_0.55)]" />
           <AnimatePresence mode="popLayout">
@@ -99,14 +130,22 @@ export default function StoryHeartbeatLoader({
               key={rippleKey}
               className="absolute inset-0 rounded-full border border-accent/50"
               initial={{ scale: 0.85, opacity: 0.55 }}
-              animate={{ scale: 1.55, opacity: 0 }}
+              animate={{ scale: 1.9, opacity: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.65, ease: "easeOut" }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            />
+            <motion.span
+              key={`${rippleKey}-2`}
+              className="absolute inset-0 rounded-full border border-accent/35"
+              initial={{ scale: 0.85, opacity: 0.35 }}
+              animate={{ scale: 2.3, opacity: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut", delay: 0.09 }}
             />
           </AnimatePresence>
         </div>
 
-        <EcgContinuousLine elapsedMs={elapsedMs} />
+        <EcgContinuousLine elapsedMs={elapsedMs} beatKey={beatKey} running={running} />
 
         <motion.p
           className="font-letter text-center text-sm italic text-muted-foreground"

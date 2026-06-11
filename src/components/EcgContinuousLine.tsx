@@ -1,48 +1,94 @@
-import { useMemo } from "react";
+import { useEffect, useRef } from "react";
 import {
-  buildBeatSchedule,
-  buildEcgPath,
-  timeToPathX,
-} from "@/lib/heartbeat-loader-timing";
+  drawEcgFrame,
+  ECG_CANVAS_HEIGHT,
+  ECG_CANVAS_WIDTH,
+  type EcgSegments,
+  queueEcgBeat,
+} from "@/lib/heartbeat-ecg-canvas";
+import { cycleMsToBpm, getHeartbeatCycleMs, STORY_LOADER_MIN_MS } from "@/lib/heartbeat-loader-timing";
 
-const VIEW_WIDTH = 300;
-const PATH_WIDTH = 1000;
-const VIEW_HEIGHT = 56;
+export default function EcgContinuousLine({
+  elapsedMs,
+  beatKey,
+  running = true,
+}: {
+  elapsedMs: number;
+  beatKey: number;
+  running?: boolean;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const segmentsRef = useRef<EcgSegments>({});
+  const headXRef = useRef(0);
+  const viewXRef = useRef(0);
+  const prevTsRef = useRef<number | null>(null);
+  const lastBeatKeyRef = useRef(-1);
+  const elapsedRef = useRef(elapsedMs);
+  elapsedRef.current = elapsedMs;
 
-export default function EcgContinuousLine({ elapsedMs }: { elapsedMs: number }) {
-  const schedule = useMemo(() => buildBeatSchedule(), []);
-  const pathD = useMemo(() => buildEcgPath(schedule, PATH_WIDTH), [schedule]);
-  const headX = timeToPathX(elapsedMs, PATH_WIDTH);
-  const viewStart = Math.max(0, headX - VIEW_WIDTH * 0.72);
-  const headInView = ((headX - viewStart) / VIEW_WIDTH) * 100;
+  useEffect(() => {
+    if (!running || beatKey === lastBeatKeyRef.current) return;
+    lastBeatKeyRef.current = beatKey;
+    const bpm = cycleMsToBpm(getHeartbeatCycleMs(elapsedRef.current));
+    queueEcgBeat(segmentsRef.current, headXRef.current, bpm);
+  }, [beatKey, running]);
+
+  useEffect(() => {
+    if (!running) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let raf = 0;
+
+    const tick = (ts: number) => {
+      if (prevTsRef.current === null) prevTsRef.current = ts;
+      const dt = Math.min((ts - prevTsRef.current) / 1000, 0.05);
+      prevTsRef.current = ts;
+
+      const currentBpm = cycleMsToBpm(getHeartbeatCycleMs(elapsedRef.current));
+      headXRef.current += (55 + currentBpm * 0.75) * dt;
+
+      const headFloor = Math.floor(headXRef.current);
+      if (segmentsRef.current[headFloor] === undefined) {
+        segmentsRef.current[headFloor] = ECG_CANVAS_HEIGHT / 2;
+      }
+
+      if (headXRef.current > viewXRef.current + ECG_CANVAS_WIDTH * 0.8) {
+        viewXRef.current = headXRef.current - ECG_CANVAS_WIDTH * 0.8;
+      }
+
+      drawEcgFrame(ctx, segmentsRef.current, headXRef.current, viewXRef.current, currentBpm);
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [running]);
 
   return (
     <div
-      className="relative w-64 max-w-[78vw] overflow-hidden"
+      className="relative w-64 max-w-[78vw]"
       style={{ filter: "drop-shadow(0 0 6px rgba(244, 114, 182, 0.55))" }}
     >
-      <svg
-        viewBox={`${viewStart} 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
-        className="h-14 w-full"
+      <canvas
+        ref={canvasRef}
+        width={ECG_CANVAS_WIDTH}
+        height={ECG_CANVAS_HEIGHT}
+        className="block h-20 w-full"
         aria-hidden
-        preserveAspectRatio="xMidYMid slice"
-        role="img"
-      >
-        <title>Linha do eletrocardiograma</title>
-        <path
-          d={pathD}
-          fill="none"
-          stroke="#f472b6"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      {elapsedMs > 80 && elapsedMs < 6950 && (
-        <div
-          className="pointer-events-none absolute inset-y-0 w-0.5 bg-pink-400/90"
-          style={{ left: `${Math.min(96, Math.max(2, headInView))}%` }}
-        />
+      />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "repeating-linear-gradient(0deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 3px)",
+        }}
+      />
+      {elapsedMs > 80 && elapsedMs < STORY_LOADER_MIN_MS - 50 && (
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-9 bg-gradient-to-l from-background/80 to-transparent" />
       )}
     </div>
   );
