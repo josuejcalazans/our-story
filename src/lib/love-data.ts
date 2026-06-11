@@ -75,4 +75,4 @@ E continuarei te amando em todos os dias que vierem depois.
 
 Para sempre seu.`;
 
-export const FINAL_MESSAGE = `De todas as escolhas que fiz na vida... você foi a melhor delas.`;
+export const FINAL_MESSAGE = "De todas as escolhas que fiz na vida... você foi a melhor delas.";

@@ -30,15 +30,15 @@ export function buildQRStylingConfig(options: StyledQROptions): Options {
     },
     dotsOptions: {
       color: options.fgColor,
-      type: options.dotStyle as any,
+      type: options.dotStyle as DotType,
     },
     cornersSquareOptions: {
       color: options.fgColor,
-      type: options.cornerSquareStyle as any,
+      type: options.cornerSquareStyle as CornerSquareType,
     },
     cornersDotOptions: {
       color: options.fgColor,
-      type: options.cornerDotStyle as any,
+      type: options.cornerDotStyle as CornerDotType,
     },
     backgroundOptions: {
       color: options.bgColor,

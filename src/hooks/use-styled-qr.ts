@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from "react";
 import QRCodeStyling from "qr-code-styling";
 import { buildQRStylingConfig, type StyledQROptions } from "@/lib/qr-config";
@@ -52,20 +51,7 @@ export function useStyledQRCode(
     return () => {
       cancelled = true;
     };
-  }, [
-    containerRef,
-    options.data,
-    options.size,
-    options.fgColor,
-    options.bgColor,
-    options.level,
-    options.dotStyle,
-    options.cornerSquareStyle,
-    options.cornerDotStyle,
-    options.logoUrl,
-    options.logoSize,
-    options.logoExcavate,
-  ]);
+  }, [containerRef, options]);
 
   return qrRef;
 }
