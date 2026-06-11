@@ -184,14 +184,15 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
       6: STAGE_6_MS,
     };
 
-    if (stage === 4 || finale) return;
+    // Estágio 4 avança via efeito de fade/explosão — não por timer
+    if (stage === 4) return;
 
     const t = setTimeout(() => {
       if (stage < 6) setStage((stage + 1) as Stage);
     }, durations[stage]);
 
     return () => clearTimeout(t);
-  }, [stage, finale]);
+  }, [stage]);
 
   useEffect(() => {
     if (stage !== 4 || fadingRef.current || finale) return;
@@ -204,6 +205,7 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
       setDarkness(0.92);
       setTimeout(() => {
         setStage(5);
+        setFinale(false);
         setTimeout(() => setDarkness(0), 600);
       }, FINALE_MS);
     });
