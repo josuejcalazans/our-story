@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, Sparkles, ArrowDown, Play, Mail, Lock, X, ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
+import { Heart, Sparkles, ArrowDown, Play, Lock, X, ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   RELATIONSHIP_START as FALLBACK_START,
   HER_NAME as FALLBACK_NAME,
@@ -24,6 +24,8 @@ import { useRomanceMusic } from "@/hooks/use-romance-music";
 import RomanceMusicPlayer from "@/components/story/RomanceMusicPlayer";
 import MessageWall from "@/components/story/MessageWall";
 import CinematicEnding from "@/components/story/CinematicEnding";
+import ChapterNav from "@/components/story/ChapterNav";
+import LoveLetterEnvelope from "@/components/story/LoveLetterEnvelope";
 import { StoryIcon } from "@/lib/story-icons";
 import { StoryDateDisplay } from "@/components/StoryDate";
 import {
@@ -134,7 +136,10 @@ function Hero({
   };
 
   return (
-    <section className="relative flex min-h-[100svh] items-center justify-center overflow-hidden px-6">
+    <section
+      id="chapter-hero"
+      className="relative flex min-h-[100svh] scroll-mt-20 items-center justify-center overflow-hidden px-6"
+    >
       <div className="absolute inset-0 bg-glow" />
       <Particles />
       <motion.div
@@ -212,7 +217,7 @@ function TimeTogether({ startDate }: { startDate: Date }) {
     { label: "segundos", value: t.seconds },
   ];
   return (
-    <SectionShell>
+    <SectionShell id="chapter-time">
       <SectionTitle eyebrow="Capítulo 01" title="Estamos juntos há" />
       <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
         {units.map((u) => (
@@ -318,7 +323,7 @@ function Timeline({
 }) {
   const [open, setOpen] = useState<number | null>(null);
   return (
-    <SectionShell>
+    <SectionShell id="chapter-timeline">
       <SectionTitle eyebrow="Capítulo 03" title="Nossa História" />
       <div className="relative mt-16">
         <div className="absolute left-4 top-0 h-full w-px bg-gradient-to-b from-primary/0 via-primary/70 to-primary/0 sm:left-1/2" />
@@ -498,7 +503,7 @@ function Gallery() {
   if (isLoading || !mounted) return null;
 
   return (
-    <SectionShell>
+    <SectionShell id="chapter-gallery">
       <SectionTitle eyebrow="Capítulo 05" title="Nossos momentos" />
       <p className="mx-auto mt-3 max-w-md text-center text-sm text-muted-foreground">
         Passe o mouse e clique na moldura para ampliar.
@@ -683,65 +688,6 @@ function VideoMessage({
   );
 }
 
-/* ------------------------- Love Letter ------------------------- */
-function LoveLetter({ letter }: { letter: string }) {
-  const [text, setText] = useState("");
-  const [opened, setOpened] = useState(false);
-  useEffect(() => {
-    if (!opened) return;
-    setText("");
-    let i = 0;
-    const id = setInterval(() => {
-      i++;
-      setText(letter.slice(0, i));
-      if (i >= letter.length) clearInterval(id);
-    }, 28);
-    return () => clearInterval(id);
-  }, [opened, letter]);
-  return (
-    <SectionShell>
-      <SectionTitle eyebrow="Capítulo 07" title="Uma carta para você" />
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        className="paper-texture glass mx-auto mt-10 max-w-2xl rounded-3xl border border-white/10 p-8 shadow-soft sm:p-12"
-      >
-        {!opened ? (
-          <div className="flex flex-col items-center py-8 text-center">
-            <Mail className="h-10 w-10 text-accent/80" />
-            <p className="mt-4 font-letter text-lg italic text-muted-foreground">
-              Tem algo escrito só para você...
-            </p>
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => setOpened(true)}
-              className="mt-8 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-8 py-3 text-sm font-medium text-accent shadow-glow cursor-pointer"
-            >
-              Abrir Carta
-            </motion.button>
-          </div>
-        ) : (
-          <>
-            <Mail className="h-6 w-6 text-secondary" />
-            <pre className="mt-6 whitespace-pre-wrap font-script text-2xl leading-relaxed text-foreground sm:text-3xl">
-              {text}
-              {text.length < letter.length && (
-                <span
-                  className="ml-0.5 inline-block w-[2px] bg-secondary align-middle"
-                  style={{ height: "1em", animation: "blink 1s steps(2) infinite" }}
-                />
-              )}
-            </pre>
-          </>
-        )}
-      </motion.div>
-    </SectionShell>
-  );
-}
-
 /* ------------------------- Memories with heart-tap easter egg ------------------------- */
 function isMemoryUnlocked(e: { is_locked?: boolean; unlock_at?: string | null }) {
   if (!e.is_locked) return true;
@@ -784,7 +730,7 @@ function Memories({
   };
 
   return (
-    <SectionShell>
+    <SectionShell id="chapter-memories">
       <SectionTitle eyebrow="Capítulo 08" title="Memórias Guardadas" />
       <p className="mx-auto mt-3 max-w-md text-center text-sm text-muted-foreground">
         Algumas memórias desbloqueiam com o tempo. Toque nos envelopes abertos.
@@ -884,7 +830,7 @@ function FinalSurprise({
   onCinematic: () => void;
 }) {
   return (
-    <SectionShell className="text-center">
+    <SectionShell id="chapter-final" className="text-center">
       <SectionTitle eyebrow="Capítulo final" title="Para sempre" />
       <motion.p
         initial={{ opacity: 0, y: 30 }}
@@ -988,7 +934,7 @@ function SectionShell({
       whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.75, ease: "easeOut" }}
-      className={`relative mx-auto w-full max-w-5xl px-6 py-24 sm:py-32 ${className}`}
+      className={`relative mx-auto w-full max-w-5xl scroll-mt-20 px-6 py-24 sm:py-32 ${className}`}
     >
       {children}
     </motion.section>
@@ -1137,6 +1083,7 @@ export default function OurStory() {
 
   return (
     <main className={`relative ${themeClass}`}>
+      <ChapterNav />
       <Hero
         herName={herName}
         onStart={start}
@@ -1156,7 +1103,10 @@ export default function OurStory() {
           hiddenVideoUrl={settings?.hidden_video_url ?? ""}
         />
         <MessageWall notes={loveNotes ?? []} />
-        <LoveLetter letter={letter} />
+        <SectionShell id="chapter-letter">
+          <SectionTitle eyebrow="Capítulo 07" title="Uma carta para você" />
+          <LoveLetterEnvelope letter={letter} />
+        </SectionShell>
         <Memories
           envelopes={envelopeItems}
           onHeartTaps={() => {
