@@ -173,7 +173,11 @@ function Hero({
         </motion.div>
         <h1 className="font-display text-5xl leading-tight tracking-tight text-glow sm:text-7xl md:text-8xl">
           Oi <span className="romantic-gradient-text italic">{herName}</span>{" "}
-          <span className="inline-block drop-shadow-[0_0_18px_oklch(1_0_0/0.45)]">❤</span>
+          <Heart
+            aria-hidden
+            className="inline-block h-[0.72em] w-[0.72em] shrink-0 fill-white text-white stroke-white drop-shadow-[0_0_16px_rgba(255,255,255,0.55)]"
+            style={{ verticalAlign: "-0.08em" }}
+          />
         </h1>
         <p className="mx-auto mt-6 max-w-md font-letter text-xl italic text-muted-foreground sm:text-2xl">
           Preparei algo especial para você.
