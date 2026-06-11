@@ -1,66 +1,92 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HEARTBEAT_CYCLE_MS, startHeartbeatLoop } from "@/lib/heartbeat-sound";
+import {
+  createAudioContext,
+  HEARTBEAT_CYCLE_MS,
+  playHeartbeatPulse,
+  startHeartbeatLoop,
+} from "@/lib/heartbeat-sound";
 
 export function useHeartbeatSound(enabled = true) {
   const ctxRef = useRef<AudioContext | null>(null);
+  const masterRef = useRef<GainNode | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
   const [muted, setMuted] = useState(false);
-  const [needsTap, setNeedsTap] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
 
-  const prefersQuiet =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  const stop = useCallback(() => {
-    stopRef.current?.();
-    stopRef.current = null;
-    if (ctxRef.current) {
-      void ctxRef.current.close();
-      ctxRef.current = null;
+  const ensureContext = useCallback(() => {
+    if (!ctxRef.current || ctxRef.current.state === "closed") {
+      const ctx = createAudioContext();
+      const master = ctx.createGain();
+      master.gain.value = 0.9;
+      master.connect(ctx.destination);
+      ctxRef.current = ctx;
+      masterRef.current = master;
     }
+    return { ctx: ctxRef.current, master: masterRef.current! };
   }, []);
 
-  const start = useCallback(async () => {
-    if (!enabled || muted || prefersQuiet || typeof window === "undefined") return;
+  const stopLoop = useCallback(() => {
+    stopRef.current?.();
+    stopRef.current = null;
+  }, []);
 
-    stop();
-    const ctx = new AudioContext();
-    ctxRef.current = ctx;
-
-    const stopLoop = await startHeartbeatLoop(ctx);
-    if (!stopLoop) {
-      setNeedsTap(true);
-      void ctx.close();
-      ctxRef.current = null;
-      return;
+  const stopAll = useCallback(() => {
+    stopLoop();
+    if (ctxRef.current && ctxRef.current.state !== "closed") {
+      void ctxRef.current.close();
     }
+    ctxRef.current = null;
+    masterRef.current = null;
+    setUnlocked(false);
+  }, [stopLoop]);
 
-    setNeedsTap(false);
-    stopRef.current = stopLoop;
-  }, [enabled, muted, prefersQuiet, stop]);
+  /** Chamar direto de click / pointerdown. */
+  const unlockFromGesture = useCallback(() => {
+    if (!enabled || muted || typeof window === "undefined") return;
 
-  const enableSound = useCallback(async () => {
+    try {
+      const { ctx, master } = ensureContext();
+
+      void ctx.resume().then(() => {
+        if (ctx.state !== "running") return;
+        master.gain.value = 0.9;
+        setUnlocked(true);
+        if (!stopRef.current) {
+          stopRef.current = startHeartbeatLoop(ctx, master);
+        }
+        playHeartbeatPulse(ctx, master);
+      });
+    } catch {
+      /* Web Audio indisponível */
+    }
+  }, [enabled, muted, ensureContext]);
+
+  const mute = useCallback(() => {
+    setMuted(true);
+    if (masterRef.current) masterRef.current.gain.value = 0;
+    stopLoop();
+  }, [stopLoop]);
+
+  const unmuteFromGesture = useCallback(() => {
     setMuted(false);
-    setNeedsTap(false);
-    await start();
-  }, [start]);
+    unlockFromGesture();
+  }, [unlockFromGesture]);
 
   useEffect(() => {
-    if (!enabled || muted || prefersQuiet) {
-      stop();
+    if (!enabled) {
+      stopAll();
       return;
     }
-
-    void start();
-
-    return stop;
-  }, [enabled, muted, prefersQuiet, start, stop]);
+    return () => stopAll();
+  }, [enabled, stopAll]);
 
   return {
     muted,
-    needsTap: needsTap && !muted && !prefersQuiet,
-    toggleMute: () => setMuted((m) => !m),
-    enableSound,
+    unlocked,
+    needsTap: enabled && !unlocked && !muted,
+    mute,
+    unmuteFromGesture,
+    unlockFromGesture,
     cycleMs: HEARTBEAT_CYCLE_MS,
   };
 }

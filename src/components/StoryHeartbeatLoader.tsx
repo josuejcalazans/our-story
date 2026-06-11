@@ -15,31 +15,32 @@ export default function StoryHeartbeatLoader({
   message?: string;
   sound?: boolean;
 }) {
-  const { muted, needsTap, toggleMute, enableSound } = useHeartbeatSound(sound);
+  const { muted, unlocked, needsTap, mute, unmuteFromGesture, unlockFromGesture } =
+    useHeartbeatSound(sound);
 
   return (
-    <div className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-background">
+    <div
+      className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-background"
+      onPointerDown={() => {
+        if (sound && !muted) unlockFromGesture();
+      }}
+      role="presentation"
+    >
       <div className="absolute inset-0 bg-glow" />
 
-      <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
-        {needsTap && (
-          <button
-            type="button"
-            onClick={() => void enableSound()}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground cursor-pointer"
-          >
-            Ativar batimento
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={toggleMute}
-          aria-label={muted ? "Ativar som do coração" : "Silenciar som do coração"}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground cursor-pointer"
-        >
-          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-        </button>
-      </div>
+      <button
+        type="button"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (muted) unmuteFromGesture();
+          else mute();
+        }}
+        aria-label={muted ? "Ativar som do coração" : "Silenciar som do coração"}
+        className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground cursor-pointer"
+      >
+        {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+      </button>
 
       <div className="relative z-10 flex flex-col items-center gap-10 px-6">
         <motion.div
@@ -110,6 +111,22 @@ export default function StoryHeartbeatLoader({
         >
           {message}
         </motion.p>
+
+        {sound && needsTap && (
+          <motion.p
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-full border border-accent/25 bg-accent/10 px-4 py-2 text-center text-xs text-accent"
+          >
+            Toque em qualquer lugar para ouvir o coração
+          </motion.p>
+        )}
+
+        {sound && unlocked && !muted && (
+          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">
+            Batimento ativo
+          </p>
+        )}
       </div>
     </div>
   );
