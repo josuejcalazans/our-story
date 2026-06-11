@@ -11,14 +11,13 @@ export type StyledQROptions = {
   dotStyle: DotType;
   cornerSquareStyle: CornerSquareType;
   cornerDotStyle: CornerDotType;
-  logoUrl?: string;
-  logoSize?: number;
-  logoExcavate?: boolean;
+  logoUrl: string;
+  logoSize: number;
+  logoExcavate: boolean;
 };
 
 export function buildQRStylingConfig(options: StyledQROptions): Options {
   const hasLogo = Boolean(options.logoUrl);
-  const logoSize = options.logoSize ?? 50;
 
   return {
     width: options.size,
@@ -51,11 +50,11 @@ export function buildQRStylingConfig(options: StyledQROptions): Options {
       ? {
           crossOrigin: "anonymous",
           margin: 4,
-          imageSize: logoSize / options.size,
-          hideBackgroundDots: options.logoExcavate ?? true,
+          imageSize: options.logoSize / options.size,
+          hideBackgroundDots: options.logoExcavate,
         }
       : {
-          hideBackgroundDots: options.logoExcavate ?? true,
+          hideBackgroundDots: options.logoExcavate,
           imageSize: 0.4,
           margin: 0,
         },

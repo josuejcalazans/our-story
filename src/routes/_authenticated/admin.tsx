@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, type ChangeEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,8 @@ import {
   Shapes,
   Maximize,
   Shield,
+  Image,
+  Link,
 } from "lucide-react";
 import { useAuth } from "@/lib/use-auth";
 import {
@@ -48,8 +50,15 @@ import { z } from "zod";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import QRStylePicker from "@/components/QRStylePicker";
 import { useStyledQRCode } from "@/hooks/use-styled-qr";
+import { canvasToBlob, downloadBlob, renderExportCanvas } from "@/lib/qr-export";
+import {
+  fetchLogoAsDataUrl,
+  readImageFileAsDataUrl,
+  removeLogoBackground,
+} from "@/lib/qr-logo";
 import {
   CORNER_DOT_STYLES,
   CORNER_SQUARE_STYLES,
@@ -380,9 +389,13 @@ function SharePanel() {
   const [size, setSize] = useState(256);
   const [level, setLevel] = useState<ECLevel>("H");
   const [logoUrl, setLogoUrl] = useState("");
-  const [logoRenderUrl, setLogoRenderUrl] = useState("");
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoInput, setLogoInput] = useState("");
   const [logoSize, setLogoSize] = useState(50);
   const [logoExcavate, setLogoExcavate] = useState(true);
+  const [logoOriginalUrl, setLogoOriginalUrl] = useState<string | null>(null);
+  const [removingBg, setRemovingBg] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dotStyle, setDotStyle] = useState<DotType>(REFERENCE_STYLE_PRESET.dotStyle);
   const [cornerSquareStyle, setCornerSquareStyle] = useState<CornerSquareType>(
     REFERENCE_STYLE_PRESET.cornerSquareStyle,
@@ -403,40 +416,85 @@ function SharePanel() {
     if (raw) setHistory(JSON.parse(raw));
   }, []);
 
-  useEffect(() => {
-    if (!logoUrl) {
-      setLogoRenderUrl("");
+  const handleLogoFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Envie um arquivo de imagem");
       return;
     }
-
-    if (logoUrl.startsWith("data:")) {
-      setLogoRenderUrl(logoUrl);
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("A imagem deve ter menos de 2MB");
       return;
     }
+    try {
+      const result = await readImageFileAsDataUrl(file);
+      setLogoUrl(result);
+      setLogoPreview(result);
+      setLogoOriginalUrl(null);
+      toast.success("Logo enviada!");
+    } catch {
+      toast.error("Erro ao ler a imagem");
+    }
+  }, []);
 
-    let cancelled = false;
+  const handleLogoUrlChange = useCallback(async (value: string) => {
+    setLogoInput(value);
+    if (!value) {
+      setLogoUrl("");
+      setLogoPreview(null);
+      return;
+    }
+    if (value.startsWith("data:")) {
+      setLogoUrl(value);
+      setLogoPreview(value);
+      return;
+    }
+    setLogoPreview(value);
+    setLogoUrl("");
+    try {
+      const dataUrl = await fetchLogoAsDataUrl(value);
+      setLogoUrl(dataUrl);
+      setLogoPreview(dataUrl);
+      setLogoOriginalUrl(null);
+      toast.success("Logo carregada!");
+    } catch {
+      setLogoPreview(null);
+      toast.error("Não foi possível carregar. Tente fazer upload do arquivo.");
+    }
+  }, []);
 
-    void (async () => {
-      try {
-        const res = await fetch(logoUrl);
-        if (!res.ok) throw new Error("fetch failed");
-        const blob = await res.blob();
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (ev) => resolve(ev.target?.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-        if (!cancelled) setLogoRenderUrl(dataUrl);
-      } catch {
-        if (!cancelled) setLogoRenderUrl(logoUrl);
-      }
-    })();
+  const clearLogo = useCallback(() => {
+    setLogoUrl("");
+    setLogoInput("");
+    setLogoPreview(null);
+    setLogoOriginalUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
 
-    return () => {
-      cancelled = true;
-    };
+  const handleRemoveLogoBackground = useCallback(async () => {
+    if (!logoUrl) return;
+    setRemovingBg(true);
+    try {
+      const out = await removeLogoBackground(logoUrl);
+      setLogoOriginalUrl((prev) => prev ?? logoUrl);
+      setLogoUrl(out);
+      setLogoPreview(out);
+      toast.success("Fundo removido");
+    } catch {
+      toast.error("Não foi possível remover o fundo");
+    } finally {
+      setRemovingBg(false);
+    }
   }, [logoUrl]);
+
+  const restoreLogoBackground = useCallback(() => {
+    if (!logoOriginalUrl) return;
+    setLogoUrl(logoOriginalUrl);
+    setLogoPreview(logoOriginalUrl);
+    setLogoOriginalUrl(null);
+    toast.success("Logo original restaurada");
+  }, [logoOriginalUrl]);
 
   const styledQROptions = useMemo(
     () => ({
@@ -448,7 +506,7 @@ function SharePanel() {
       dotStyle,
       cornerSquareStyle,
       cornerDotStyle,
-      logoUrl: logoRenderUrl,
+      logoUrl,
       logoSize,
       logoExcavate,
     }),
@@ -461,7 +519,7 @@ function SharePanel() {
       dotStyle,
       cornerSquareStyle,
       cornerDotStyle,
-      logoRenderUrl,
+      logoUrl,
       logoSize,
       logoExcavate,
     ],
@@ -515,36 +573,26 @@ function SharePanel() {
   ]);
 
   const downloadQR = useCallback(async () => {
-    const canvas = qrCanvasRef.current?.querySelector("canvas");
-    if (!canvas) return;
+    if (!url.trim() || isExporting) return;
 
     setIsExporting(true);
     try {
-      const finalCanvas = document.createElement("canvas");
-      const ctx = finalCanvas.getContext("2d");
-      const margin = includeMargin ? 40 : 0;
-      finalCanvas.width = canvas.width + margin * 2;
-      finalCanvas.height = canvas.height + margin * 2;
-
-      if (ctx) {
-        ctx.fillStyle = bgColor;
-        ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
-        ctx.drawImage(canvas, margin, margin);
-
-        const dataUrl = finalCanvas.toDataURL("image/png");
-        const link = document.createElement("a");
-        link.download = `qrcode-historia-${Date.now()}.png`;
-        link.href = dataUrl;
-        link.click();
-        saveToHistory();
-        toast.success("QR Code baixado!");
-      }
-    } catch (err) {
-      toast.error("Erro ao exportar");
+      const exportCanvas = await renderExportCanvas(
+        styledQROptions,
+        includeMargin ? 40 : 0,
+        "preview",
+        qrCanvasRef.current?.querySelector("canvas"),
+      );
+      const blob = await canvasToBlob(exportCanvas);
+      downloadBlob(blob, `qrcode-historia-${Date.now()}.png`);
+      saveToHistory();
+      toast.success("QR Code baixado!");
+    } catch {
+      toast.error("Erro ao exportar. Faça upload da logo novamente.");
     } finally {
       setIsExporting(false);
     }
-  }, [includeMargin, bgColor, saveToHistory]);
+  }, [url, styledQROptions, includeMargin, isExporting, saveToHistory]);
 
   const restoreItem = (item: HistoryItem) => {
     setFgColor(item.fgColor);
@@ -552,6 +600,9 @@ function SharePanel() {
     setSize(item.size);
     setLevel(item.level);
     setLogoUrl(item.logoUrl);
+    setLogoPreview(item.logoUrl || null);
+    setLogoInput("");
+    setLogoOriginalUrl(null);
     setLogoSize(item.logoSize);
     setDotStyle(item.dotStyle);
     setCornerSquareStyle(item.cornerSquareStyle);
@@ -734,36 +785,134 @@ function SharePanel() {
           </TabsContent>
 
           <TabsContent value="logo" className="mt-4 space-y-4">
-            <div className="space-y-4">
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                Logo Central
-              </label>
-              <MediaUpload type="image" currentUrl={logoUrl} onUpload={setLogoUrl} />
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Logo Central
+            </Label>
 
-              {logoUrl && (
-                <div className="space-y-4 pt-4 border-t border-white/5">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>TAMANHO DA LOGO</span>
-                      <span>{logoSize}px</span>
-                    </div>
-                    <Slider
-                      value={[logoSize]}
-                      onValueChange={([v]) => setLogoSize(v)}
-                      min={20}
-                      max={Math.round(size * 0.4)}
-                      step={2}
-                      className="accent-accent"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Recortar fundo</span>
-                    <Switch checked={logoExcavate} onCheckedChange={setLogoExcavate} />
-                  </div>
+            {logoPreview && (
+              <div className="relative w-full flex justify-center">
+                <div className="relative">
+                  <img
+                    src={logoPreview}
+                    alt="Preview da logo"
+                    className="w-16 h-16 object-contain rounded-lg border border-white/10 bg-white/5"
+                    onError={() => {
+                      setLogoPreview(null);
+                      toast.error("Erro ao carregar imagem");
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={clearLogo}
+                    className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center hover:bg-destructive/90 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            <Tabs defaultValue="upload" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 h-9 bg-white/5">
+                <TabsTrigger value="upload" className="text-xs gap-1.5">
+                  <Upload className="w-3.5 h-3.5" />
+                  Upload
+                </TabsTrigger>
+                <TabsTrigger value="url" className="text-xs gap-1.5">
+                  <Link className="w-3.5 h-3.5" />
+                  URL
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="upload" className="mt-3 space-y-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoFileUpload}
+                  className="hidden"
+                  id="share-logo-upload"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full h-20 border-2 border-dashed border-white/10 hover:border-accent/50 flex flex-col gap-2 rounded-xl"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Clique para enviar imagem</span>
+                </Button>
+                <p className="text-[10px] text-muted-foreground/60 text-center">
+                  PNG, JPG, SVG • Máx. 2MB
+                </p>
+              </TabsContent>
+              <TabsContent value="url" className="mt-3 space-y-3">
+                <Input
+                  type="text"
+                  placeholder="https://exemplo.com/logo.png"
+                  value={logoInput}
+                  onChange={(e) => void handleLogoUrlChange(e.target.value)}
+                  className="h-10 font-mono text-xs"
+                />
+                <p className="text-[10px] text-muted-foreground/60">
+                  A imagem precisa permitir CORS; caso contrário, faça upload do arquivo.
+                </p>
+              </TabsContent>
+            </Tabs>
+
+            {logoUrl && (
+              <div className="space-y-4 pt-3 border-t border-white/5">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>TAMANHO DA LOGO</span>
+                    <span>{logoSize}px</span>
+                  </div>
+                  <Slider
+                    value={[logoSize]}
+                    onValueChange={([v]) => setLogoSize(v)}
+                    min={20}
+                    max={Math.round(size * 0.4)}
+                    step={2}
+                    className="accent-accent"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <div>
+                    <div className="text-foreground">Recortar fundo</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      Remove os pixels do QR atrás da logo
+                    </div>
+                  </div>
+                  <Switch checked={logoExcavate} onCheckedChange={setLogoExcavate} />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="flex-1 gap-1.5 text-xs rounded-xl"
+                    onClick={() => void handleRemoveLogoBackground()}
+                    disabled={removingBg}
+                  >
+                    <Scissors className="w-3.5 h-3.5" />
+                    {removingBg ? "Removendo…" : "Remover fundo"}
+                  </Button>
+                  {logoOriginalUrl && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="gap-1.5 text-xs rounded-xl"
+                      onClick={restoreLogoBackground}
+                    >
+                      <Undo2 className="w-3.5 h-3.5" />
+                      Restaurar
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="history" className="mt-4">
