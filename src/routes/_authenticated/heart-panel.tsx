@@ -104,8 +104,10 @@ type HistoryItem = {
   createdAt: number;
 };
 
+const ADMIN_TABS = ["timeline", "stats", "gallery", "letter", "share"] as const;
+
 const adminSearchSchema = z.object({
-  tab: z.enum(["timeline", "stats", "gallery", "letter", "share"]).optional().default("timeline"),
+  tab: z.enum(ADMIN_TABS).optional().default("timeline"),
 });
 
 export const Route = createFileRoute("/_authenticated/heart-panel")({
@@ -204,12 +206,15 @@ function AdminPage() {
 
         <Tabs
           value={activeTab}
-          onValueChange={(value) =>
+          onValueChange={(value) => {
+            const tab = ADMIN_TABS.find((t) => t === value);
+            if (!tab) return;
             navigate({
-              search: (prev) => ({ ...prev, tab: value as any }),
+              to: "/heart-panel",
+              search: (prev) => ({ ...prev, tab }),
               replace: true,
-            })
-          }
+            });
+          }}
           className="w-full"
         >
           <TabsList className="grid w-full grid-cols-5 rounded-xl bg-white/5 p-1">
@@ -701,13 +706,14 @@ function SharePanel() {
                   </PopoverTrigger>
                   <PopoverContent className="w-64 p-4 space-y-4 glass border-white/10">
                     <div className="space-y-3">
-                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <label htmlFor="presets" className="text-[10px] uppercase tracking-wider text-muted-foreground">
                         Presets
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {COLOR_PRESETS.map((p) => (
                           <button
                             key={p.name}
+                            type="button"
                             onClick={() => {
                               setFgColor(p.fg);
                               setBgColor(p.bg);
@@ -721,7 +727,7 @@ function SharePanel() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <label className="text-[10px] text-muted-foreground">Pixel</label>
+                        <label htmlFor="pixel" className="text-[10px] text-muted-foreground">Pixel</label>
                         <input
                           type="color"
                           value={fgColor}
@@ -730,7 +736,7 @@ function SharePanel() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-[10px] text-muted-foreground">Fundo</label>
+                        <label htmlFor="background" className="text-[10px] text-muted-foreground">Fundo</label>
                         <input
                           type="color"
                           value={bgColor}
@@ -749,7 +755,7 @@ function SharePanel() {
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-64 p-4 glass border-white/10">
-                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <label htmlFor="qr-size" className="text-[10px] uppercase tracking-wider text-muted-foreground">
                       QR Size: {size}px
                     </label>
                     <Slider
@@ -926,7 +932,7 @@ function SharePanel() {
           <TabsContent value="history" className="mt-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <label htmlFor="recentes" className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   Recentes ({history.length})
                 </label>
                 {history.length > 0 && (
@@ -970,6 +976,7 @@ function SharePanel() {
                         </p>
                       </div>
                       <button
+                        type="button"
                         onClick={() => restoreItem(item)}
                         className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-all text-accent"
                       >
@@ -1091,6 +1098,7 @@ function MediaUpload({
             </div>
           )}
           <button
+            type="button"
             onClick={() => onUpload("")}
             className="absolute -right-2 -top-2 rounded-full bg-destructive p-1 text-white shadow-md cursor-pointer"
           >
@@ -1169,9 +1177,9 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
         description: form.description,
         place: form.place,
         sort_order: form.sort_order,
-        image_url: (form as any).image_url,
-        video_url: (form as any).video_url,
-      } as any)
+        image_url: form.image_url,
+        video_url: form.video_url,
+      })
       .eq("id", ev.id);
     if (error) toast.error(error.message);
     else toast.success("Salvo");
@@ -1190,7 +1198,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
     <div className="glass space-y-4 rounded-2xl p-6">
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+          <label htmlFor="data" className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
             Data
           </label>
           <Input
@@ -1201,7 +1209,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
           />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+          <label htmlFor="title" className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
             Título
           </label>
           <Input
@@ -1212,7 +1220,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
           />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+          <label htmlFor="place" className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
             Local (Opcional)
           </label>
           <Input
@@ -1225,7 +1233,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
       </div>
 
       <div className="space-y-1">
-        <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+        <label htmlFor="description" className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
           Descrição
         </label>
 
@@ -1240,13 +1248,13 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
       <div className="grid gap-4 sm:grid-cols-2">
         <MediaUpload
           type="image"
-          currentUrl={(form as any).image_url}
-          onUpload={(url) => setForm({ ...form, image_url: url } as any)}
+          currentUrl={form.image_url ?? undefined}
+          onUpload={(url) => setForm({ ...form, image_url: url })}
         />
         <MediaUpload
           type="video"
-          currentUrl={(form as any).video_url}
-          onUpload={(url) => setForm({ ...form, video_url: url } as any)}
+          currentUrl={form.video_url ?? undefined}
+          onUpload={(url) => setForm({ ...form, video_url: url })}
         />
       </div>
 
@@ -1397,8 +1405,8 @@ function SettingsEditor() {
         relationship_start: form.relationship_start,
         secret_message: form.secret_message,
         hidden_video_url: form.hidden_video_url,
-        theme_mode: (form as any).theme_mode || "romantic",
-      } as any)
+        theme_mode: form.theme_mode,
+      })
       .eq("id", 1);
     if (error) toast.error(error.message);
     else {
@@ -1419,9 +1427,10 @@ function SettingsEditor() {
         </div>
         <div className="flex gap-2 rounded-xl bg-white/5 p-1">
           <button
-            onClick={() => setForm({ ...form, theme_mode: "romantic" } as any)}
+            type="button"
+            onClick={() => setForm({ ...form, theme_mode: "romantic" })}
             className={`rounded-lg px-4 py-2 text-xs transition-all cursor-pointer ${
-              (form as any).theme_mode !== "soft-rose"
+              form.theme_mode !== "soft-rose"
                 ? "bg-primary shadow-glow"
                 : "hover:bg-white/5"
             }`}
@@ -1429,9 +1438,10 @@ function SettingsEditor() {
             Romantic Deep
           </button>
           <button
-            onClick={() => setForm({ ...form, theme_mode: "soft-rose" } as any)}
+            type="button"
+            onClick={() => setForm({ ...form, theme_mode: "soft-rose" })}
             className={`rounded-lg px-4 py-2 text-xs transition-all cursor-pointer ${
-              (form as any).theme_mode === "soft-rose"
+              form.theme_mode === "soft-rose"
                 ? "bg-accent shadow-glow"
                 : "hover:bg-white/5"
             }`}
@@ -1443,7 +1453,7 @@ function SettingsEditor() {
 
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+          <label htmlFor="her-name" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
             Nome dela
           </label>
           <Input
@@ -1453,7 +1463,7 @@ function SettingsEditor() {
           />
         </div>
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+          <label htmlFor="relationship-start" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
             Início do relacionamento
           </label>
           <Input
@@ -1467,7 +1477,7 @@ function SettingsEditor() {
         </div>
       </div>
       <div className="space-y-2">
-        <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+        <label htmlFor="love-letter" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
           Carta de amor
         </label>
         <Textarea
@@ -1478,7 +1488,7 @@ function SettingsEditor() {
         />
       </div>
       <div className="space-y-2">
-        <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+        <label htmlFor="final-message" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
           Mensagem final
         </label>
         <Textarea
@@ -1489,7 +1499,7 @@ function SettingsEditor() {
         />
       </div>
       <div className="space-y-2">
-        <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+        <label htmlFor="secret-message" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
           Segredo (easter eggs)
         </label>
         <Textarea
@@ -1500,7 +1510,7 @@ function SettingsEditor() {
         />
       </div>
       <div className="space-y-2">
-        <label className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+        <label htmlFor="hidden-video-url" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
           Vídeo Escondido (Upload ou URL)
         </label>
         <div className="flex flex-col sm:flex-row gap-4 items-end">
