@@ -5,12 +5,12 @@ export const STORY_LOADER_MIN_MS = 7000;
 export const HEARTBEAT_ACCELERATE_AT_MS = 3000;
 
 /** Baseline plana antes do primeiro pico (como no monitor) */
-export const HEARTBEAT_INITIAL_FLAT_MS = 500;
+export const HEARTBEAT_INITIAL_FLAT_MS = 120;
 
-/** ~92 bpm em repouso — ciclo completo lub→dub→pausa */
-export const HEARTBEAT_CYCLE_SLOW_MS = 1550;
-/** ~115 bpm no fim da aceleração */
-export const HEARTBEAT_CYCLE_FAST_MS = 650;
+/** ~115 bpm em repouso */
+export const HEARTBEAT_CYCLE_SLOW_MS = 1050;
+/** ~150 bpm no fim da aceleração */
+export const HEARTBEAT_CYCLE_FAST_MS = 400;
 
 const LUB_IN_CYCLE = 0.12;
 const DUB_IN_CYCLE = 0.34;
