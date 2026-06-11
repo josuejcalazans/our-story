@@ -1,6 +1,7 @@
+import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, Sparkles, ArrowDown, Play, Mail, Lock, X } from "lucide-react";
+import { Heart, Sparkles, ArrowDown, Play, Mail, Lock, X, ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   RELATIONSHIP_START as FALLBACK_START,
   HER_NAME as FALLBACK_NAME,
@@ -10,7 +11,15 @@ import {
   LOVE_LETTER as FALLBACK_LETTER,
   FINAL_MESSAGE as FALLBACK_FINAL,
 } from "@/lib/love-data";
-import { useTimeline, useStats, useSettings, useGallery } from "@/lib/use-site-content";
+import { useTimeline, useStats, useSettings, useGallery, usePlaces, useMemoryEnvelopes } from "@/lib/use-site-content";
+import { StoryIcon } from "@/lib/story-icons";
+import { StoryDateDisplay } from "@/components/StoryDate";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /* ------------------------- Floating particles (seeded — organic look, stable on reload) ------------------------- */
 function createSeededParticles(count: number) {
@@ -235,39 +244,65 @@ function TimeTogether({ startDate }: { startDate: Date }) {
 }
 
 /* ------------------------- Stats ------------------------- */
+function statDisplayValue(value: string, days: number) {
+  return value === "dynamic-days" ? String(days) : value;
+}
+
+function isLongStatValue(value: string, days: number) {
+  const text = statDisplayValue(value, days);
+  return text.length > 6;
+}
+
 function StatsSection({
   stats,
   days,
 }: {
-  stats: { id?: string; icon: string; label: string; value: string }[];
+  stats: { id?: string; icon: string; icon_name?: string | null; label: string; value: string }[];
   days: number;
 }) {
   return (
     <SectionShell>
       <SectionTitle eyebrow="Capítulo 02" title="Nossa história em números" />
       <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3">
-        {stats.map((s, i) => (
-          <motion.div
-            key={s.id ?? s.label}
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ delay: i * 0.08, duration: 0.6 }}
-            whileHover={{ y: -6, scale: 1.02 }}
-            className="glass group relative aspect-square overflow-hidden rounded-3xl p-6 shadow-soft"
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 opacity-0 transition-opacity group-hover:opacity-100" />
-            <div className="relative flex h-full flex-col justify-between">
-              <div className="text-4xl">{s.icon}</div>
-              <div>
-                <div className="font-display text-4xl leading-none romantic-gradient-text sm:text-5xl">
-                  {s.value === "dynamic-days" ? days : s.value}
+        {stats.map((s, i) => {
+          const display = statDisplayValue(s.value, days);
+          const longValue = isLongStatValue(s.value, days);
+          return (
+            <motion.div
+              key={s.id ?? s.label}
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ delay: i * 0.08, duration: 0.6 }}
+              whileHover={{ y: -6, scale: 1.02 }}
+              className="glass group relative min-h-[9.5rem] overflow-hidden rounded-3xl p-5 shadow-soft sm:min-h-[10.5rem] sm:p-6"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/10 opacity-0 transition-opacity group-hover:opacity-100" />
+              <div className="relative flex h-full flex-col justify-between gap-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20 text-primary">
+                  <StoryIcon
+                    name={s.icon_name}
+                    emoji={s.icon}
+                    className="h-5 w-5"
+                    filled={s.icon_name === "Heart"}
+                  />
                 </div>
-                <div className="mt-2 text-sm text-muted-foreground">{s.label}</div>
+                <div className="min-w-0">
+                  <div
+                    className={`font-display leading-tight romantic-gradient-text break-words ${
+                      longValue
+                        ? "text-xl sm:text-2xl"
+                        : "text-3xl sm:text-4xl md:text-5xl"
+                    }`}
+                  >
+                    {display}
+                  </div>
+                  <div className="mt-2 text-sm text-muted-foreground">{s.label}</div>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        ))}
+            </motion.div>
+          );
+        })}
       </div>
     </SectionShell>
   );
@@ -285,6 +320,7 @@ function Timeline({
     place: string | null;
     image_url?: string;
     video_url?: string;
+    icon_name?: string | null;
   }[];
 }) {
   const [open, setOpen] = useState<number | null>(null);
@@ -308,8 +344,12 @@ function Timeline({
                   isLeft ? "sm:flex-row" : "sm:flex-row-reverse"
                 }`}
               >
-                <div className="relative z-10 mt-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary shadow-glow sm:absolute sm:left-1/2 sm:-translate-x-1/2">
-                  <Heart className="h-4 w-4 fill-white text-white" />
+                <div className="relative z-10 mt-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary shadow-glow ring-4 ring-background sm:absolute sm:left-1/2 sm:h-10 sm:w-10 sm:-translate-x-1/2">
+                  <StoryIcon
+                    name={item.icon_name}
+                    className="h-4 w-4 text-white"
+                    filled
+                  />
                 </div>
                 <button
                   type="button"
@@ -328,10 +368,14 @@ function Timeline({
                     </div>
                   )}
                   <div className="p-6">
-                    <div className="text-xs uppercase tracking-[0.2em] text-secondary">
-                      {item.date}
+                    <div className={isLeft ? "sm:flex sm:justify-end" : ""}>
+                      <StoryDateDisplay
+                        value={item.date}
+                        align={isLeft ? "right" : "left"}
+                        showWeekday
+                      />
                     </div>
-                    <h3 className="mt-2 font-display text-2xl">{item.title}</h3>
+                    <h3 className="mt-3 font-display text-2xl">{item.title}</h3>
                     <AnimatePresence initial={false}>
                       {isOpen && (
                         <motion.div
@@ -364,8 +408,9 @@ function Timeline({
                             </div>
                           )}
                           {item.place && (
-                            <p className="mt-3 text-xs uppercase tracking-[0.2em] text-accent">
-                              📍 {item.place}
+                            <p className="mt-3 flex items-center gap-1.5 text-xs uppercase tracking-[0.2em] text-accent">
+                              <StoryIcon name="MapPin" className="h-3.5 w-3.5" />
+                              {item.place}
                             </p>
                           )}
                         </motion.div>
@@ -386,22 +431,29 @@ function Timeline({
 }
 
 /* ------------------------- Places ------------------------- */
-function Places() {
+function Places({
+  items,
+}: {
+  items: { id?: string; icon: string; icon_name?: string | null; title: string; subtitle: string }[];
+}) {
   return (
     <SectionShell>
       <SectionTitle eyebrow="Capítulo 04" title="Nossos lugares" />
       <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {PLACES.map((p, i) => (
+        {items.map((p, i) => (
           <motion.div
-            key={p.title}
+            key={p.id ?? p.title}
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true, margin: "-60px" }}
             transition={{ delay: i * 0.06, duration: 0.5 }}
-            className="glass group rounded-2xl p-6 transition-all hover:-translate-y-1 hover:shadow-glow"
+            whileHover={{ y: -4 }}
+            className="glass group rounded-2xl p-6 transition-all hover:shadow-glow"
           >
-            <div className="text-3xl">{p.emoji}</div>
-            <h3 className="mt-3 font-display text-xl">{p.title}</h3>
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/10 text-accent ring-1 ring-accent/20 transition-colors group-hover:bg-accent/20">
+              <StoryIcon name={p.icon_name} emoji={p.icon} className="h-5 w-5" />
+            </div>
+            <h3 className="mt-4 font-display text-xl">{p.title}</h3>
             <p className="mt-1 text-sm text-muted-foreground">{p.subtitle}</p>
           </motion.div>
         ))}
@@ -431,43 +483,123 @@ function getEmbedUrl(url: string) {
 function Gallery() {
   const { data: images, isLoading } = useGallery();
   const [mounted, setMounted] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   useEffect(() => setMounted(true), []);
+
+  const list = images ?? [];
+  const active = lightboxIndex !== null ? list[lightboxIndex] : null;
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxIndex(null);
+      if (e.key === "ArrowRight")
+        setLightboxIndex((i) => (i === null ? null : (i + 1) % list.length));
+      if (e.key === "ArrowLeft")
+        setLightboxIndex((i) => (i === null ? null : (i - 1 + list.length) % list.length));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightboxIndex, list.length]);
 
   if (isLoading || !mounted) return null;
 
   return (
     <SectionShell>
       <SectionTitle eyebrow="Capítulo 05" title="Galeria de momentos" />
-      <div className="mt-10 columns-2 gap-4 sm:columns-3">
-        {(images ?? []).map((img, i) => (
+      <p className="mx-auto mt-3 max-w-md text-center text-sm text-muted-foreground">
+        Passe o mouse e clique na moldura para ampliar.
+      </p>
+      <div className="mt-10 columns-2 gap-5 sm:columns-3">
+        {list.map((img, i) => (
           <motion.div
             key={img.id}
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-40px" }}
             transition={{ delay: i * 0.05 }}
-            className="group mb-4 break-inside-avoid overflow-hidden rounded-2xl shadow-soft"
+            className="group mb-5 break-inside-avoid"
           >
-            <div className="relative overflow-hidden">
-              <img
-                src={img.image_url}
-                alt={img.caption || ""}
-                className="w-full object-cover transition-transform duration-500 group-hover:scale-110"
-              />
-              {img.caption && (
-                <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 to-transparent p-4 opacity-0 transition-opacity group-hover:opacity-100">
-                  <p className="text-xs text-white italic">{img.caption}</p>
+            <button
+              type="button"
+              onClick={() => setLightboxIndex(i)}
+              className="relative w-full cursor-zoom-in rounded-[1.35rem] p-2 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-glow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <div className="absolute inset-0 rounded-[1.35rem] border-2 border-transparent transition-all duration-500 group-hover:border-primary/50 group-hover:shadow-[0_0_30px_-5px_var(--primary)]" />
+              <div className="relative overflow-hidden rounded-2xl">
+                <img
+                  src={img.image_url}
+                  alt={img.caption || "Foto da galeria"}
+                  className="w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-sm transition-all duration-300 group-hover:opacity-100 group-hover:scale-100 scale-90">
+                  <ZoomIn className="h-4 w-4 text-white" />
                 </div>
-              )}
-            </div>
+                {img.caption && (
+                  <div className="absolute inset-x-0 bottom-0 p-4 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
+                    <p className="text-xs text-white italic">{img.caption}</p>
+                  </div>
+                )}
+              </div>
+            </button>
           </motion.div>
         ))}
       </div>
-      {(images ?? []).length === 0 && (
+      {list.length === 0 && (
         <p className="text-center text-sm text-muted-foreground italic mt-10">
           Nenhuma foto adicionada ainda.
         </p>
       )}
+
+      <Dialog open={lightboxIndex !== null} onOpenChange={(open) => !open && setLightboxIndex(null)}>
+        <DialogContent className="max-w-5xl border-white/10 bg-background/95 p-2 sm:p-4">
+          <DialogTitle className="sr-only">Foto ampliada</DialogTitle>
+          <DialogDescription className="sr-only">
+            {active?.caption || "Visualização da galeria"}
+          </DialogDescription>
+          {active && (
+            <div className="relative">
+              <img
+                src={active.image_url}
+                alt={active.caption || ""}
+                className="max-h-[80vh] w-full rounded-2xl object-contain"
+              />
+              {active.caption && (
+                <p className="mt-3 text-center font-letter text-lg italic text-muted-foreground">
+                  {active.caption}
+                </p>
+              )}
+              {list.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Foto anterior"
+                    onClick={() =>
+                      setLightboxIndex((i) =>
+                        i === null ? null : (i - 1 + list.length) % list.length,
+                      )
+                    }
+                    className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white backdrop-blur-sm cursor-pointer hover:bg-black/70"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Próxima foto"
+                    onClick={() =>
+                      setLightboxIndex((i) => (i === null ? null : (i + 1) % list.length))
+                    }
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white backdrop-blur-sm cursor-pointer hover:bg-black/70"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </SectionShell>
   );
 }
@@ -585,13 +717,21 @@ function LoveLetter({ letter }: { letter: string }) {
 }
 
 /* ------------------------- Memories with heart-tap easter egg ------------------------- */
-function Memories({ onHeartTaps }: { onHeartTaps: () => void }) {
-  const envelopes = [
-    { id: "hard-days", emoji: "💌", title: "Para os dias difíceis", message: "Respira. Eu tô aqui. Sempre." },
-    { id: "dream-together", emoji: "🌟", title: "Para sonhar comigo", message: "Tem uma vida inteira nos esperando." },
-    { id: "our-song", emoji: "🎶", title: "Nossa música", message: "Toca, fecha os olhos, e lembra de mim." },
-    { id: "just-because", emoji: "🌹", title: "Só porque sim", message: "Você é a parte boa do meu dia." },
-  ];
+function Memories({
+  envelopes,
+  onHeartTaps,
+}: {
+  envelopes: {
+    id: string;
+    icon: string;
+    icon_name?: string | null;
+    title: string;
+    message: string;
+    is_easter_egg?: boolean;
+  }[];
+  onHeartTaps: () => void;
+}) {
+  const cards = envelopes.filter((e) => !e.is_easter_egg);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [taps, setTaps] = useState(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -616,7 +756,7 @@ function Memories({ onHeartTaps }: { onHeartTaps: () => void }) {
         Toque em cada envelope.
       </p>
       <div className="mt-10 grid gap-5 sm:grid-cols-2">
-        {envelopes.map((e) => {
+        {cards.map((e) => {
           const isOpen = open[e.id];
           return (
             <button
@@ -632,7 +772,9 @@ function Memories({ onHeartTaps }: { onHeartTaps: () => void }) {
               >
                 {!isOpen ? (
                   <div className="flex items-start gap-4">
-                    <div className="text-4xl">{e.emoji}</div>
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20">
+                      <StoryIcon name={e.icon_name} emoji={e.icon} className="h-5 w-5" />
+                    </div>
                     <div>
                       <h3 className="font-display text-xl">{e.title}</h3>
                       <p className="mt-1 text-sm text-muted-foreground">Toque para abrir</p>
@@ -648,17 +790,38 @@ function Memories({ onHeartTaps }: { onHeartTaps: () => void }) {
           );
         })}
       </div>
-      <div className="mt-10 flex justify-center">
-        <button
+
+      <div className="mt-12 flex flex-col items-center gap-3">
+        <motion.button
           type="button"
           onClick={tapHeart}
-          aria-label="Coração escondido"
-          className="rounded-full p-3 opacity-40 transition-all hover:opacity-100 cursor-pointer"
+          aria-label="Coração escondido — easter egg"
+          animate={{
+            boxShadow: [
+              "0 0 0 0 oklch(0.74 0.21 350 / 0.25)",
+              "0 0 0 12px oklch(0.74 0.21 350 / 0)",
+            ],
+          }}
+          transition={{ duration: 2.2, repeat: Number.POSITIVE_INFINITY }}
+          className="group relative rounded-full border border-dashed border-accent/30 bg-accent/5 p-4 transition-all hover:border-accent/60 hover:bg-accent/10 cursor-pointer"
         >
           <Heart
-            className={`h-6 w-6 ${taps > 0 ? "fill-accent text-accent" : "text-muted-foreground"}`}
+            className={`h-7 w-7 transition-all ${
+              taps > 0 ? "fill-accent text-accent scale-110" : "text-accent/70 group-hover:text-accent"
+            }`}
           />
-        </button>
+          <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-glow">
+            ?
+          </span>
+        </motion.button>
+        <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.25em] text-muted-foreground/70">
+          <Sparkles className="h-3 w-3 text-accent/70" />
+          Tem um segredo escondido aqui
+          <Sparkles className="h-3 w-3 text-accent/70" />
+        </p>
+        {taps > 0 && taps < 5 && (
+          <p className="text-xs text-accent/80">{5 - taps} toques restantes...</p>
+        )}
       </div>
     </SectionShell>
   );
@@ -857,6 +1020,8 @@ export default function OurStory() {
   const { data: timeline } = useTimeline();
   const { data: stats } = useStats();
   const { data: settings } = useSettings();
+  const { data: places } = usePlaces();
+  const { data: memoryEnvelopes } = useMemoryEnvelopes();
   const { unlocks, unlock } = useUnlocks();
   const [modal, setModal] = useState<{ open: boolean; kind: "secret" | "video" }>({
     open: false,
@@ -884,6 +1049,7 @@ export default function OurStory() {
         place: e.place,
         image_url: e.image_url ?? undefined,
         video_url: e.video_url ?? undefined,
+        icon_name: e.icon_name,
       }))
     : FALLBACK_TIMELINE.map((e, i) => ({
         id: String(i),
@@ -891,11 +1057,50 @@ export default function OurStory() {
         title: e.title,
         description: e.description,
         place: e.place,
+        icon_name: "Heart" as const,
       }));
 
   const statItems = (stats ?? []).length
-    ? (stats ?? []).map((s) => ({ id: s.id, icon: s.icon, label: s.label, value: s.value }))
-    : FALLBACK_STATS;
+    ? (stats ?? []).map((s) => ({
+        id: s.id,
+        icon: s.icon,
+        icon_name: s.icon_name,
+        label: s.label,
+        value: s.value,
+      }))
+    : FALLBACK_STATS.map((s) => ({ ...s, icon_name: null }));
+
+  const placeItems = (places ?? []).length
+    ? (places ?? []).map((p) => ({
+        id: p.id,
+        icon: p.icon,
+        icon_name: p.icon_name,
+        title: p.title,
+        subtitle: p.subtitle,
+      }))
+    : PLACES.map((p, i) => ({
+        id: String(i),
+        icon: p.emoji,
+        icon_name: null,
+        title: p.title,
+        subtitle: p.subtitle,
+      }));
+
+  const envelopeItems = (memoryEnvelopes ?? []).length
+    ? (memoryEnvelopes ?? []).map((e) => ({
+        id: e.id,
+        icon: e.icon,
+        icon_name: e.icon_name,
+        title: e.title,
+        message: e.message,
+        is_easter_egg: e.is_easter_egg,
+      }))
+    : [
+        { id: "hard-days", icon: "💌", icon_name: "Mail", title: "Para os dias difíceis", message: "Respira. Eu tô aqui. Sempre.", is_easter_egg: false },
+        { id: "dream-together", icon: "🌟", icon_name: "Star", title: "Para sonhar comigo", message: "Tem uma vida inteira nos esperando.", is_easter_egg: false },
+        { id: "our-song", icon: "🎶", icon_name: "Music", title: "Nossa música", message: "Toca, fecha os olhos, e lembra de mim.", is_easter_egg: false },
+        { id: "just-because", icon: "🌹", icon_name: "Flower2", title: "Só porque sim", message: "Você é a parte boa do meu dia.", is_easter_egg: false },
+      ];
 
   usePhraseListener("eu te amo", () => {
     unlock("love-phrase");
@@ -922,7 +1127,7 @@ export default function OurStory() {
         <TimeTogether startDate={startDate} />
         <StatsSection stats={statItems} days={t.days} />
         <Timeline items={timelineItems} />
-        <Places />
+        <Places items={placeItems} />
         <Gallery />
         <VideoMessage
           hiddenUnlocked={hiddenUnlocked}
@@ -930,6 +1135,7 @@ export default function OurStory() {
         />
         <LoveLetter letter={letter} />
         <Memories
+          envelopes={envelopeItems}
           onHeartTaps={() => {
             unlock("heart-taps");
             setModal({ open: true, kind: "secret" });
@@ -938,7 +1144,15 @@ export default function OurStory() {
         <FinalSurprise finalMessage={finalMessage} />
       </div>
       <footer className="px-6 py-10 text-center text-xs text-muted-foreground/60">
-        Feito com <Heart className="inline h-3 w-3 fill-accent text-accent" /> só para você.
+        <p>
+          Feito com <Heart className="inline h-3 w-3 fill-accent text-accent" /> só para você.
+        </p>
+        <Link
+          to="/auth"
+          className="mt-2 inline-block text-[9px] tracking-[0.2em] text-muted-foreground/25 uppercase transition-colors hover:text-muted-foreground/45"
+        >
+          entrar
+        </Link>
       </footer>
       <SecretModal
         open={modal.open}
