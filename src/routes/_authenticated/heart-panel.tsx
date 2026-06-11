@@ -50,6 +50,7 @@ import {
   type MemoryEnvelope,
 } from "@/lib/use-site-content";
 import IconPicker from "@/components/IconPicker";
+import { StoryDatePicker, StoryDateTextPicker } from "@/components/StoryDate";
 import { formatAccessPassword } from "@/lib/page-gate";
 import { SEED_MEMORY_ENVELOPES, SEED_PLACES } from "@/lib/content-seeds";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1219,15 +1220,13 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
   return (
     <div className="glass space-y-4 rounded-2xl p-6">
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-1">
+        <div className="space-y-1 sm:col-span-3">
           <label htmlFor="data" className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
             Data
           </label>
-          <Input
-            placeholder="Ex: 12 Jun 2023"
+          <StoryDateTextPicker
             value={form.date_text}
-            onChange={(e) => setForm({ ...form, date_text: e.target.value })}
-            className="bg-white/5 rounded-xl border-white/5"
+            onChange={(date_text) => setForm({ ...form, date_text })}
           />
         </div>
         <div className="space-y-1">
@@ -1494,12 +1493,10 @@ function SettingsEditor() {
               <label htmlFor="access-date" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
                 Nosso dia (data da senha)
               </label>
-              <Input
-                id="access-date"
-                type="date"
+              <StoryDatePicker
                 value={gateDate}
-                onChange={(e) => setForm({ ...form, access_date: e.target.value || null })}
-                className="bg-white/5 rounded-xl border-white/5"
+                onChange={(access_date) => setForm({ ...form, access_date })}
+                placeholder="Escolher nosso dia"
               />
             </div>
             <div className="flex flex-col justify-end rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
@@ -1559,13 +1556,13 @@ function SettingsEditor() {
           <label htmlFor="relationship-start" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
             Início do relacionamento
           </label>
-          <Input
-            type="datetime-local"
-            value={form.relationship_start.slice(0, 16)}
-            onChange={(e) =>
-              setForm({ ...form, relationship_start: new Date(e.target.value).toISOString() })
-            }
-            className="bg-white/5 rounded-xl border-white/5"
+          <StoryDatePicker
+            mode="datetime"
+            value={form.relationship_start}
+            onChange={(relationship_start) => {
+              if (relationship_start) setForm({ ...form, relationship_start });
+            }}
+            placeholder="Quando tudo começou"
           />
         </div>
       </div>
