@@ -13,7 +13,9 @@ const LINES = [
   "Para todo sempre, minha deusa",
 ] as const;
 
-const LINE_DWELL_MS = [4800, 4200, 3600, 6200];
+/** Tempo com a frase na tela após a animação de entrada (~0.5s) */
+const LINE_DWELL_MS = [5200, 4500, 4000, 6500];
+const LINE_ENTER_MS = 500;
 
 function RisingParticles() {
   const particles = Array.from({ length: 28 }, (_, id) => ({
@@ -248,7 +250,7 @@ function GoddessLine({ text }: { text: string }) {
   );
 }
 
-function EndingLine({
+function EndingLineContent({
   index,
   onFirstLineRevealed,
 }: {
@@ -257,21 +259,10 @@ function EndingLine({
 }) {
   const text = LINES[index];
 
-  return (
-    <motion.div
-      key={index}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0, y: -20, filter: "blur(10px)", scale: 0.98 }}
-      transition={{ duration: 0.65, ease: "easeInOut" }}
-      className="flex w-full items-center justify-center px-4 text-center"
-    >
-      {index === 0 && <ChaptersLine text={text} onRevealed={onFirstLineRevealed} />}
-      {index === 1 && <FutureLine text={text} />}
-      {index === 2 && <LoveLine text={text} />}
-      {index === 3 && <GoddessLine text={text} />}
-    </motion.div>
-  );
+  if (index === 0) return <ChaptersLine text={text} onRevealed={onFirstLineRevealed} />;
+  if (index === 1) return <FutureLine text={text} />;
+  if (index === 2) return <LoveLine text={text} />;
+  return <GoddessLine text={text} />;
 }
 
 export default function CinematicEnding({
@@ -307,7 +298,10 @@ export default function CinematicEnding({
     if (!active || !curtainOpen) return;
     if (line >= LINES.length - 1) return;
 
-    const t = window.setTimeout(() => setLine((l) => l + 1), LINE_DWELL_MS[line]);
+    const dwell = LINE_DWELL_MS[line] ?? 4000;
+    const t = window.setTimeout(() => {
+      setLine((current) => (current < LINES.length - 1 ? current + 1 : current));
+    }, dwell);
     return () => window.clearTimeout(t);
   }, [active, curtainOpen, line]);
 
@@ -347,9 +341,21 @@ export default function CinematicEnding({
           />
 
           <div className="relative z-30 flex w-full max-w-3xl flex-1 items-center justify-center px-4">
-            <AnimatePresence mode="wait">
+            <AnimatePresence mode="wait" initial={false}>
               {curtainOpen && (
-                <EndingLine index={line} onFirstLineRevealed={handleFirstLineRevealed} />
+                <motion.div
+                  key={line}
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -14 }}
+                  transition={{ duration: LINE_ENTER_MS / 1000, ease: "easeInOut" }}
+                  className="flex w-full items-center justify-center px-4 text-center"
+                >
+                  <EndingLineContent
+                    index={line}
+                    onFirstLineRevealed={handleFirstLineRevealed}
+                  />
+                </motion.div>
               )}
             </AnimatePresence>
           </div>
