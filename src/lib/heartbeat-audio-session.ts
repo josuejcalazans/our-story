@@ -13,6 +13,7 @@ type Session = {
 let session: Session | null = null;
 let stopped = true;
 let unlocked = false;
+let fading = false;
 
 export function isHeartbeatAudioStopped() {
   return stopped;
@@ -29,12 +30,30 @@ export function getHeartbeatSession(): Session | null {
 
 function ensureSession(): Session {
   stopped = false;
+  fading = false;
   if (session && session.ctx.state !== "closed") return session;
 
   const ctx = createAudioContext();
   const { master, compressor } = createHeartbeatBus(ctx);
   session = { ctx, master, compressor };
   return session;
+}
+
+function closeSession(ctx: AudioContext, master: GainNode, compressor: DynamicsCompressorNode) {
+  try {
+    const t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(0, t);
+    master.disconnect();
+    compressor.disconnect();
+  } catch {
+    /* nó já desconectado */
+  }
+
+  if (ctx.state === "running") {
+    void ctx.suspend();
+  }
+  void ctx.close();
 }
 
 /** No toque da tela Preparando — await resume para iOS */
@@ -45,6 +64,7 @@ export async function unlockHeartbeatAudio(): Promise<boolean> {
   try {
     setPlaybackAudioSession();
     stopped = false;
+    fading = false;
 
     const { ctx, master } = ensureSession();
 
@@ -73,37 +93,73 @@ export async function unlockHeartbeatAudio(): Promise<boolean> {
 
 export function setHeartbeatMuted(muted: boolean) {
   const current = getHeartbeatSession();
-  if (!current) return;
+  if (!current || fading) return;
   const t = current.ctx.currentTime;
   current.master.gain.cancelScheduledValues(t);
   current.master.gain.setValueAtTime(muted ? 0 : 0.5, t);
 }
 
-/** Para ao terminar o loader — não chamar no remount do React */
+/** Fade suave — usado no final do loader */
+export function fadeOutHeartbeatAudioSession(fadeMs = 550): Promise<void> {
+  if (fading) {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (!fading) resolve();
+        else window.setTimeout(check, 40);
+      };
+      check();
+    });
+  }
+
+  stopped = true;
+  unlocked = false;
+
+  const current = session;
+  if (!current || current.ctx.state === "closed") {
+    session = null;
+    resetPlaybackAudioSession();
+    return Promise.resolve();
+  }
+
+  fading = true;
+  const { ctx, master, compressor } = current;
+  const fadeSec = fadeMs / 1000;
+
+  try {
+    const t = ctx.currentTime;
+    const currentGain = master.gain.value;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(currentGain, t);
+    master.gain.linearRampToValueAtTime(0, t + fadeSec);
+  } catch {
+    fading = false;
+    session = null;
+    closeSession(ctx, master, compressor);
+    resetPlaybackAudioSession();
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    window.setTimeout(() => {
+      fading = false;
+      session = null;
+      resetPlaybackAudioSession();
+      closeSession(ctx, master, compressor);
+      resolve();
+    }, fadeMs + 60);
+  });
+}
+
+/** Para imediato — só quando já está silenciado ou navegação forçada */
 export function stopHeartbeatAudioSession() {
   stopped = true;
   unlocked = false;
+  fading = false;
   resetPlaybackAudioSession();
 
   const current = session;
   session = null;
 
   if (!current || current.ctx.state === "closed") return;
-
-  const { ctx, master, compressor } = current;
-
-  try {
-    const t = ctx.currentTime;
-    master.gain.cancelScheduledValues(t);
-    master.gain.setValueAtTime(0, t);
-    master.disconnect();
-    compressor.disconnect();
-  } catch {
-    /* nó já desconectado */
-  }
-
-  if (ctx.state === "running") {
-    void ctx.suspend();
-  }
-  void ctx.close();
+  closeSession(current.ctx, current.master, current.compressor);
 }

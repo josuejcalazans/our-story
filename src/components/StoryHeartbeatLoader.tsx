@@ -7,6 +7,7 @@ import {
   cycleMsToBpm,
   getHeartPulseScale,
   getHeartbeatCycleMs,
+  getHeartbeatAudioStopAtMs,
   HEARTBEAT_ACCELERATE_AT_MS,
   HEARTBEAT_INITIAL_FLAT_MS,
   STORY_LOADER_MIN_MS,
@@ -50,22 +51,27 @@ export default function StoryHeartbeatLoader({
   const running = elapsedMs < STORY_LOADER_MIN_MS;
   const accelerating = elapsedMs >= HEARTBEAT_ACCELERATE_AT_MS;
   const completedRef = useRef(false);
+  const fadingRef = useRef(false);
+  const audioStopAtMs = getHeartbeatAudioStopAtMs();
 
   const [beatKey, setBeatKey] = useState(0);
   const [heartScale, setHeartScale] = useState(1);
   const [rippleKey, setRippleKey] = useState(0);
 
-  const { muted, mute, unmute, playBeat, stopAll } = useHeartbeatSound();
+  const { muted, mute, unmute, playBeat, fadeOut } = useHeartbeatSound();
 
   const playBeatRef = useRef(playBeat);
   playBeatRef.current = playBeat;
 
   useEffect(() => {
-    if (elapsedMs < STORY_LOADER_MIN_MS || completedRef.current) return;
-    completedRef.current = true;
-    stopAll();
-    onComplete?.();
-  }, [elapsedMs, onComplete, stopAll]);
+    if (elapsedMs < audioStopAtMs || fadingRef.current || completedRef.current) return;
+    fadingRef.current = true;
+    void fadeOut().then(() => {
+      if (completedRef.current) return;
+      completedRef.current = true;
+      onComplete?.();
+    });
+  }, [elapsedMs, audioStopAtMs, fadeOut, onComplete]);
 
   useEffect(() => {
     if (!running) return;
@@ -77,7 +83,7 @@ export default function StoryHeartbeatLoader({
       if (cancelled) return;
 
       const elapsed = getElapsedMs();
-      if (elapsed >= STORY_LOADER_MIN_MS) return;
+      if (elapsed >= audioStopAtMs) return;
 
       const cycleMs = getHeartbeatCycleMs(elapsed);
       const bpm = cycleMsToBpm(cycleMs);
@@ -89,7 +95,7 @@ export default function StoryHeartbeatLoader({
       setHeartScale(scale);
       setTimeout(() => setHeartScale(1), 85);
 
-      if (cancelled || getElapsedMs() >= STORY_LOADER_MIN_MS || !sound) return;
+      if (cancelled || getElapsedMs() >= audioStopAtMs || !sound) return;
       playBeatRef.current(bpm);
 
       if (cancelled) return;
@@ -102,7 +108,7 @@ export default function StoryHeartbeatLoader({
       cancelled = true;
       if (beatTimeout) clearTimeout(beatTimeout);
     };
-  }, [running, getElapsedMs, sound]);
+  }, [running, getElapsedMs, sound, audioStopAtMs]);
 
   return (
     <div

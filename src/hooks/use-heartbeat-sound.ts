@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import {
+  fadeOutHeartbeatAudioSession,
   getHeartbeatSession,
   isHeartbeatAudioStopped,
   isHeartbeatAudioUnlocked,
@@ -14,10 +15,13 @@ export function useHeartbeatSound() {
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
-  const stopAll = useCallback(() => {
-    stopHeartbeatAudioSession();
+  const stopAll = useCallback((fade = true) => {
+    if (fade) void fadeOutHeartbeatAudioSession();
+    else stopHeartbeatAudioSession();
     setMuted(false);
   }, []);
+
+  const fadeOut = useCallback(() => fadeOutHeartbeatAudioSession(), []);
 
   const playBeat = useCallback((bpm: number) => {
     if (mutedRef.current || !isHeartbeatAudioUnlocked() || isHeartbeatAudioStopped()) {
@@ -54,6 +58,7 @@ export function useHeartbeatSound() {
     unmute,
     playBeat,
     stopAll,
+    fadeOut,
     unlockFromGesture: unlockHeartbeatAudio,
   };
 }

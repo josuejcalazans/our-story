@@ -23,7 +23,7 @@ export function createHeartbeatBus(ctx: AudioContext) {
   compressor.knee.setValueAtTime(10, 0);
   compressor.ratio.setValueAtTime(6, 0);
   compressor.attack.setValueAtTime(0.002, 0);
-  compressor.release.setValueAtTime(0.06, 0);
+  compressor.release.setValueAtTime(0.14, 0);
 
   master.connect(compressor);
   compressor.connect(ctx.destination);
@@ -72,10 +72,10 @@ export function playHeartbeatBeat(ctx: AudioContext, master: GainNode, bpm: numb
     }
 
     const v = sprint
-      ? Math.max(0.035, 0.1 - (bpm - 260) / 2500)
+      ? Math.max(0.02, 0.07 - (bpm - 260) / 1800)
       : rush
-        ? Math.max(0.07, 0.2 - (bpm - 165) / 1100)
-        : Math.min(0.32, 0.22 + bpm / 950);
+        ? Math.max(0.06, 0.18 - (bpm - 165) / 1000)
+        : Math.min(0.3, 0.2 + bpm / 1000);
 
     const maxDur = cycleSec * (sprint ? 0.28 : rush ? 0.38 : 0.52);
 

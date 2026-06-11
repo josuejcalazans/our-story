@@ -1,6 +1,13 @@
 /** Tempo mínimo do loader antes de mostrar senha ou história */
 export const STORY_LOADER_MIN_MS = 7000;
 
+/** Fade suave antes de parar — evita estouro no corte */
+export const HEARTBEAT_FADE_OUT_MS = 550;
+
+export function getHeartbeatAudioStopAtMs() {
+  return STORY_LOADER_MIN_MS - HEARTBEAT_FADE_OUT_MS;
+}
+
 /** A partir dos 3s entra o tutututu acelerado */
 export const HEARTBEAT_ACCELERATE_AT_MS = 3000;
 
