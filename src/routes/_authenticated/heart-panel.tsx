@@ -52,6 +52,7 @@ import {
 import IconPicker from "@/components/IconPicker";
 import { GatePasswordPreview, StoryDatePicker, StoryDateTextPicker } from "@/components/StoryDate";
 import { parseStoryDate, toDateOnlyString } from "@/lib/story-date";
+import { toastRomanticSave } from "@/lib/romantic-toast";
 import { SEED_MEMORY_ENVELOPES, SEED_PLACES } from "@/lib/content-seeds";
 import { useQueryClient } from "@tanstack/react-query";
 import OurStory from "@/components/OurStory";
@@ -354,7 +355,7 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
       })
       .eq("id", img.id);
     if (error) toast.error(error.message);
-    else toast.success("Salvo");
+    else toastRomanticSave("gallery");
     setSaving(false);
     onChange();
   }
@@ -1205,7 +1206,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
       })
       .eq("id", ev.id);
     if (error) toast.error(error.message);
-    else toast.success("Salvo");
+    else toastRomanticSave("timeline");
     setSaving(false);
     onChange();
   }
@@ -1364,7 +1365,7 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
       .eq("id", s.id);
     if (error) toast.error(error.message);
     else {
-      toast.success("Salvo");
+      toastRomanticSave("stats");
       onChange();
     }
   }
@@ -1454,7 +1455,7 @@ function SettingsEditor() {
       .eq("id", 1);
     if (error) toast.error(error.message);
     else {
-      toast.success("Salvo");
+      toastRomanticSave("settings");
       qc.invalidateQueries({ queryKey: ["site_settings"] });
     }
     setSaving(false);
@@ -1727,7 +1728,7 @@ function PlaceRow({ p, onChange }: { p: Place; onChange: () => void }) {
       .eq("id", p.id);
     if (error) toast.error(error.message);
     else {
-      toast.success("Salvo");
+      toastRomanticSave("places");
       onChange();
     }
   }
@@ -1880,7 +1881,7 @@ function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void })
       .eq("id", m.id);
     if (error) toast.error(error.message);
     else {
-      toast.success("Salvo");
+      toastRomanticSave("memories");
       onChange();
     }
   }

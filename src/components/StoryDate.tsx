@@ -96,29 +96,45 @@ function InlineCalendarPanel({
   onSelect,
   footer,
   className,
+  fullWidth = false,
 }: {
   selected?: Date;
   onSelect: (date: Date) => void;
   footer?: React.ReactNode;
   className?: string;
+  fullWidth?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-2xl border border-white/10 bg-card shadow-glow",
+        "overflow-hidden rounded-2xl border border-white/10 bg-card/80 shadow-glow",
+        fullWidth && "w-full",
         className,
       )}
     >
-      <Calendar
-        mode="single"
-        selected={selected}
-        defaultMonth={selected}
-        onSelect={(date) => {
-          if (date) onSelect(toCalendarDate(date));
-        }}
-        locale={ptBR}
-        className="rounded-2xl p-3"
-      />
+      <div className={cn(fullWidth && "flex w-full justify-center px-2 py-2")}>
+        <Calendar
+          mode="single"
+          selected={selected}
+          defaultMonth={selected}
+          onSelect={(date) => {
+            if (date) onSelect(toCalendarDate(date));
+          }}
+          locale={ptBR}
+          className={cn("rounded-2xl p-2 sm:p-3", fullWidth && "w-full")}
+          classNames={
+            fullWidth
+              ? {
+                  root: "w-full",
+                  month: "w-full gap-3",
+                  month_grid: "w-full",
+                  weekdays: "w-full",
+                  week: "mt-2 flex w-full justify-between",
+                }
+              : undefined
+          }
+        />
+      </div>
       {footer}
     </div>
   );
@@ -219,18 +235,27 @@ export function StoryDatePicker({
   }
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn(variant === "compact" ? "space-y-3" : "space-y-2", className)}>
+      {variant === "compact" && parsed && !open && (
+        <StoryDateDisplay value={value ?? ""} size="sm" />
+      )}
+
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left transition-all hover:border-primary/30 hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer"
+        className={cn(
+          "flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left transition-all hover:border-primary/30 hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer",
+          variant === "compact" && open && "border-primary/30 bg-primary/5",
+        )}
       >
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20">
           <CalendarHeart className="h-4 w-4" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          {variant === "compact" && parsed ? (
-            <StoryDateDisplay value={value ?? ""} size="sm" />
+          {variant === "compact" ? (
+            <span className="text-sm text-muted-foreground">
+              {open ? "Fechar calendário" : parsed ? "Alterar nosso dia" : placeholder}
+            </span>
           ) : label ? (
             <>
               <p className="truncate text-sm font-medium text-foreground">{label}</p>
@@ -248,11 +273,16 @@ export function StoryDatePicker({
         />
       </button>
 
+      {open && variant === "compact" && parsed && (
+        <StoryDateDisplay value={value ?? ""} size="sm" />
+      )}
+
       {open && (
         <InlineCalendarPanel
           selected={calendarSelected}
           onSelect={pickDate}
-          className={variant === "compact" ? "bg-white/[0.03]" : undefined}
+          fullWidth={variant === "compact"}
+          className={variant === "compact" ? "border-primary/15 bg-white/[0.02]" : undefined}
           footer={
             mode === "datetime" ? (
               <div className="flex items-center gap-3 border-t border-white/10 px-4 py-3">
