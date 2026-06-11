@@ -33,7 +33,7 @@ function AuthPage() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin + "/heart-panel" },
+          options: { emailRedirectTo: `${window.location.origin}/heart-panel` },
         });
         if (error) throw error;
         toast.success("Conta criada. Você já pode entrar.");
@@ -63,7 +63,7 @@ function AuthPage() {
                 scale: [1, 1.1, 1],
                 rotate: [0, 5, -5, 0]
             }}
-            transition={{ duration: 4, repeat: Infinity }}
+            transition={{ duration: 4, repeat: Number.POSITIVE_INFINITY }}
           >
             <Heart className="h-10 w-10 fill-accent text-accent" />
           </motion.div>
@@ -133,6 +133,7 @@ function AuthPage() {
           </Button>
         </form>
         <button
+          type="button"
           onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
           className="mt-6 w-full text-center text-xs text-muted-foreground hover:text-foreground cursor-pointer"
         >
