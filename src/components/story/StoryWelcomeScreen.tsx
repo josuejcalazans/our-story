@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Heart, Volume2 } from "lucide-react";
-import { playRomanceMusic } from "@/lib/romance-music-session";
+import { fadeOutHeartbeatAudioSession } from "@/lib/heartbeat-audio-session";
+import { playRomanceMusicWithCrossfade } from "@/lib/romance-music-session";
 
 export default function StoryWelcomeScreen({
   herName,
@@ -17,7 +18,11 @@ export default function StoryWelcomeScreen({
   async function handleReady() {
     if (loading) return;
     setLoading(true);
-    await playRomanceMusic(musicUrl);
+    const crossfadeMs = 2200;
+    await Promise.all([
+      fadeOutHeartbeatAudioSession(crossfadeMs),
+      playRomanceMusicWithCrossfade(musicUrl, crossfadeMs),
+    ]);
     window.scrollTo({ top: 0, behavior: "smooth" });
     onReady();
   }
