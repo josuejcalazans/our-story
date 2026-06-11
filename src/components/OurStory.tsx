@@ -1129,6 +1129,7 @@ export default function OurStory() {
       />
       <CinematicEnding
         active={cinematicEnding}
+        audioUrl={settings?.ending_audio_url}
         onRestart={() => {
           setCinematicEnding(false);
           window.scrollTo({ top: 0, behavior: "smooth" });
