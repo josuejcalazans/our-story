@@ -1,3 +1,4 @@
+import { pulseHeartbeatHaptic } from "@/lib/heartbeat-haptics";
 import { LUB_DUB_GAP_MS } from "@/lib/heartbeat-loader-timing";
 import { playHeartbeatSampleLayer } from "@/lib/heartbeat-sample";
 
@@ -83,6 +84,7 @@ export function playCinematicHeartbeatBeat(ctx: AudioContext, master: GainNode, 
     thump(ctx, master, dubAt, 48, 0.14, 0.075);
 
     playHeartbeatSampleLayer(ctx, master, bpm, t);
+    pulseHeartbeatHaptic("lub");
   } catch {
     /* Web Audio indisponível */
   }
