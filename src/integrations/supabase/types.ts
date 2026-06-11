@@ -118,6 +118,7 @@ export type Database = {
           hidden_video_url: string
           id: number
           love_letter: string
+          music_url: string
           page_gate_enabled: boolean
           relationship_start: string
           secret_message: string
@@ -131,6 +132,7 @@ export type Database = {
           hidden_video_url?: string
           id?: number
           love_letter?: string
+          music_url?: string
           page_gate_enabled?: boolean
           relationship_start?: string
           secret_message?: string
@@ -144,6 +146,7 @@ export type Database = {
           hidden_video_url?: string
           id?: number
           love_letter?: string
+          music_url?: string
           page_gate_enabled?: boolean
           relationship_start?: string
           secret_message?: string
