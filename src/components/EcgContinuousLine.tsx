@@ -1,58 +1,63 @@
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import {
   buildBeatSchedule,
   buildEcgPath,
   getEcgDrawProgress,
 } from "@/lib/heartbeat-loader-timing";
 
-const VIEW_WIDTH = 280;
-const PATH_WIDTH = 900;
+const VIEW_WIDTH = 300;
+const PATH_WIDTH = 1000;
+const VIEW_HEIGHT = 56;
 
 export default function EcgContinuousLine({ elapsedMs }: { elapsedMs: number }) {
+  const maskId = useId();
+  const glowId = useId();
   const schedule = useMemo(() => buildBeatSchedule(), []);
   const pathD = useMemo(() => buildEcgPath(schedule, PATH_WIDTH), [schedule]);
   const progress = getEcgDrawProgress(elapsedMs);
-  const panX = progress * (PATH_WIDTH - VIEW_WIDTH);
-  const headX = ((panX + VIEW_WIDTH * 0.88) / VIEW_WIDTH) * 100;
+  const headX = progress * PATH_WIDTH;
+  const panX = Math.max(0, headX - VIEW_WIDTH * 0.7);
+  const revealW = Math.max(0, headX - panX);
 
   return (
-    <div className="relative w-56 max-w-[70vw] overflow-hidden">
+    <div className="relative w-64 max-w-[78vw]">
       <svg
-        viewBox={`0 0 ${VIEW_WIDTH} 56`}
-        className="h-12 w-full text-accent/90"
+        viewBox={`${panX} 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
+        className="h-14 w-full"
         aria-hidden
         preserveAspectRatio="xMidYMid meet"
         role="img"
       >
         <title>Linha do eletrocardiograma</title>
         <defs>
-          <linearGradient id="ecg-glow" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="oklch(0.74 0.21 350 / 0)" />
-            <stop offset="45%" stopColor="oklch(0.74 0.21 350 / 0.9)" />
-            <stop offset="100%" stopColor="oklch(0.66 0.25 305 / 0.2)" />
-          </linearGradient>
+          <mask id={maskId}>
+            <rect x={panX} y={0} width={revealW} height={VIEW_HEIGHT} fill="white" />
+          </mask>
+          <filter id={glowId} x="-20%" y="-80%" width="140%" height="260%">
+            <feGaussianBlur stdDeviation="1.8" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
-        <g transform={`translate(${-panX} 0)`}>
-          <path
-            d={pathD}
-            fill="none"
-            stroke="url(#ecg-glow)"
-            strokeWidth="2.25"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </g>
+        <path
+          d={pathD}
+          fill="none"
+          stroke="oklch(0.74 0.21 350)"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          mask={`url(#${maskId})`}
+          filter={`url(#${glowId})`}
+        />
       </svg>
-      <div
-        className="pointer-events-none absolute inset-y-0 w-10"
-        style={{
-          left: `calc(${Math.min(100, headX)}% - 1.25rem)`,
-          background:
-            "linear-gradient(90deg, transparent, oklch(0.74 0.21 350 / 0.4), transparent)",
-          opacity: progress > 0.02 && progress < 0.99 ? 0.85 : 0,
-          transition: "opacity 0.2s",
-        }}
-      />
+      {progress > 0.01 && progress < 0.995 && (
+        <div
+          className="pointer-events-none absolute inset-y-0 w-px bg-accent/80 shadow-[0_0_12px_oklch(0.74_0.21_350_/_0.9)]"
+          style={{ left: `${Math.min(98, (revealW / VIEW_WIDTH) * 100)}%` }}
+        />
+      )}
     </div>
   );
 }

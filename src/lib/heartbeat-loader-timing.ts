@@ -4,11 +4,16 @@ export const STORY_LOADER_MIN_MS = 7000;
 /** A partir daqui a linha e os batimentos aceleram */
 export const HEARTBEAT_ACCELERATE_AT_MS = 3000;
 
+/** Baseline plana antes do primeiro pico (como no monitor) */
+export const HEARTBEAT_INITIAL_FLAT_MS = 700;
+
 export const HEARTBEAT_CYCLE_SLOW_MS = 2400;
 export const HEARTBEAT_CYCLE_FAST_MS = 780;
 
 const LUB_IN_CYCLE = 0.12;
 const DUB_IN_CYCLE = 0.34;
+
+const BASELINE_Y = 28;
 
 export type BeatPulse = { atMs: number; kind: "lub" | "dub" };
 
@@ -25,27 +30,20 @@ export function getHeartbeatCycleMs(elapsedMs: number): number {
   );
 }
 
-/** Progresso único da linha (0 → 1), sem repetir — lento até 3s, acelera até 7s */
+/** Posição horizontal na linha = tempo (0 → 1) */
 export function getEcgDrawProgress(elapsedMs: number): number {
   if (elapsedMs >= STORY_LOADER_MIN_MS) return 1;
   if (elapsedMs <= 0) return 0;
+  return elapsedMs / STORY_LOADER_MIN_MS;
+}
 
-  const slowShare = 0.18;
-
-  if (elapsedMs < HEARTBEAT_ACCELERATE_AT_MS) {
-    return slowShare * (elapsedMs / HEARTBEAT_ACCELERATE_AT_MS);
-  }
-
-  const ramp =
-    (elapsedMs - HEARTBEAT_ACCELERATE_AT_MS) /
-    (STORY_LOADER_MIN_MS - HEARTBEAT_ACCELERATE_AT_MS);
-  const eased = ramp * ramp * ramp;
-  return slowShare + (1 - slowShare) * eased;
+export function timeToPathX(ms: number, pathWidth: number): number {
+  return (ms / STORY_LOADER_MIN_MS) * pathWidth;
 }
 
 export function buildBeatSchedule(durationMs = STORY_LOADER_MIN_MS): BeatPulse[] {
   const pulses: BeatPulse[] = [];
-  let cycleStart = 0;
+  let cycleStart = HEARTBEAT_INITIAL_FLAT_MS;
 
   while (cycleStart < durationMs) {
     const cycleMs = getHeartbeatCycleMs(cycleStart);
@@ -59,28 +57,70 @@ export function buildBeatSchedule(durationMs = STORY_LOADER_MIN_MS): BeatPulse[]
   return pulses.sort((a, b) => a.atMs - b.atMs);
 }
 
-/** Linha ECG contínua — picos espaçados conforme o tempo de cada batida */
-export function buildEcgPath(schedule: BeatPulse[], width = 900): string {
-  const lubs = schedule.filter((b) => b.kind === "lub");
-  if (lubs.length === 0) return `M 0 28 H ${width}`;
+function beatWidthPx(
+  lubs: BeatPulse[],
+  index: number,
+  pathWidth: number,
+): number {
+  const lub = lubs[index];
+  if (!lub) return 60;
+  const cx = timeToPathX(lub.atMs, pathWidth);
+  const next = lubs[index + 1];
+  if (!next) return Math.min(95, Math.max(40, pathWidth - cx - 8));
+  const nextCx = timeToPathX(next.atMs, pathWidth);
+  return Math.max(26, Math.min(105, (nextCx - cx) * 0.9));
+}
 
-  let d = "M 0 28";
-  let cursorX = 0;
+/** Complexo P → QRS → T (formato clássico do ECG) */
+function appendEcgComplex(cx: number, w: number): string {
+  const y = BASELINE_Y;
+  const x = (f: number) => cx + f * w;
+
+  return [
+    `H${x(-0.44).toFixed(1)}`,
+    `L${x(-0.36).toFixed(1)} ${y - 3}`,
+    `L${x(-0.28).toFixed(1)} ${y}`,
+    `L${x(-0.20).toFixed(1)} ${y + 2}`,
+    `L${x(-0.11).toFixed(1)} ${y - 22}`,
+    `L${x(-0.03).toFixed(1)} ${y + 20}`,
+    `L${x(0.05).toFixed(1)} ${y}`,
+    `L${x(0.12).toFixed(1)} ${y - 5}`,
+    `L${x(0.20).toFixed(1)} ${y}`,
+  ].join(" ");
+}
+
+/** Linha contínua: baseline plana no início, picos mais próximos com o tempo */
+export function buildEcgPath(schedule: BeatPulse[], pathWidth = 1000): string {
+  const lubs = schedule.filter((b) => b.kind === "lub");
+  if (lubs.length === 0) return `M 0 ${BASELINE_Y} H ${pathWidth}`;
+
+  const first = lubs[0];
+  if (!first) return `M 0 ${BASELINE_Y} H ${pathWidth}`;
+  const firstCx = timeToPathX(first.atMs, pathWidth);
+  const firstW = beatWidthPx(lubs, 0, pathWidth);
+
+  let d = `M 0 ${BASELINE_Y} H ${Math.max(0, firstCx - firstW * 0.48).toFixed(1)}`;
 
   for (let i = 0; i < lubs.length; i++) {
-    const nextLub = lubs[i + 1];
-    const tEnd = nextLub ? nextLub.atMs : STORY_LOADER_MIN_MS;
-    const xEnd = (tEnd / STORY_LOADER_MIN_MS) * width;
-    const seg = xEnd - cursorX;
-    if (seg < 6) continue;
+    const lub = lubs[i];
+    if (!lub) continue;
+    const cx = timeToPathX(lub.atMs, pathWidth);
+    const w = beatWidthPx(lubs, i, pathWidth);
+    d += appendEcgComplex(cx, w);
 
-    d += ` H${cursorX + seg * 0.18}`;
-    d += ` L${cursorX + seg * 0.28} 9 L${cursorX + seg * 0.36} 47 L${cursorX + seg * 0.44} 28`;
-    d += ` H${xEnd}`;
-    cursorX = xEnd;
+    const next = lubs[i + 1];
+    if (next) {
+      const nextCx = timeToPathX(next.atMs, pathWidth);
+      const nextW = beatWidthPx(lubs, i + 1, pathWidth);
+      const flatEnd = nextCx - nextW * 0.44;
+      const complexEnd = cx + w * 0.2;
+      if (flatEnd > complexEnd + 2) {
+        d += ` H ${flatEnd.toFixed(1)}`;
+      }
+    }
   }
 
-  if (cursorX < width) d += ` H${width}`;
+  d += ` H ${pathWidth}`;
   return d;
 }
 
