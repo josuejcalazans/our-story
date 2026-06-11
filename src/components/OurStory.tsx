@@ -34,6 +34,29 @@ function createSeededParticles(count: number) {
 
 const HERO_PARTICLES = createSeededParticles(30);
 
+function createBurstHearts(count: number) {
+  let seed = 0xb1a57e9;
+  const rand = () => {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    return (seed >>> 0) / 4294967296;
+  };
+
+  return Array.from({ length: count }, () => {
+    const id = `burst-${(seed >>> 0).toString(16)}`;
+    return {
+      id,
+      x: (rand() - 0.5) * 600,
+      y: -(rand() * 500 + 100),
+      rotate: rand() * 360,
+      delay: rand() * 0.3,
+    };
+  });
+}
+
+const HEART_BURST_PARTICLES = createBurstHearts(40);
+
 function Particles() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -289,6 +312,7 @@ function Timeline({
                   <Heart className="h-4 w-4 fill-white text-white" />
                 </div>
                 <button
+                  type="button"
                   onClick={() => setOpen(isOpen ? null : i)}
                   className={`glass w-full overflow-hidden rounded-2xl text-left transition-all hover:shadow-glow cursor-pointer sm:w-[calc(50%-3rem)] ${
                     isLeft ? "sm:text-right" : ""
@@ -326,13 +350,16 @@ function Timeline({
                               item.video_url.includes("youtu.be") ||
                               item.video_url.includes("vimeo.com") ? (
                                 <iframe
+                                  title={item.title}
                                   src={getEmbedUrl(item.video_url)}
                                   className="h-full w-full"
                                   allow="autoplay; encrypted-media"
                                   allowFullScreen
                                 />
                               ) : (
-                                <video src={item.video_url} controls className="w-full" />
+                                <video src={item.video_url} controls className="w-full" aria-label={item.title}>
+                                  <track kind="captions" label="Legendas indisponíveis" />
+                                </video>
                               )}
                             </div>
                           )}
@@ -470,12 +497,13 @@ function VideoMessage({
           />
           {!playing ? (
             <button
+              type="button"
               onClick={() => setPlaying(true)}
               className="absolute inset-0 flex items-center justify-center cursor-pointer"
             >
               <motion.span
                 animate={{ scale: [1, 1.1, 1] }}
-                transition={{ duration: 1.8, repeat: Infinity }}
+                transition={{ duration: 1.8, repeat: Number.POSITIVE_INFINITY }}
                 className="flex h-20 w-20 items-center justify-center rounded-full bg-white/15 backdrop-blur-md ring-1 ring-white/30"
               >
                 <Play className="ml-1 h-8 w-8 fill-white text-white" />
@@ -490,14 +518,18 @@ function VideoMessage({
                 className="absolute inset-0 h-full w-full"
                 allow="autoplay; encrypted-media"
                 allowFullScreen
+                title="Vídeo escondido"
               />
             ) : (
               <video
                 src={hiddenVideoUrl}
                 controls
                 autoPlay
+                aria-label="Vídeo escondido"
                 className="absolute inset-0 h-full w-full"
-              />
+              >
+                <track kind="captions" label="Legendas indisponíveis" />
+              </video>
             )
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
@@ -588,7 +620,8 @@ function Memories({ onHeartTaps }: { onHeartTaps: () => void }) {
           const isOpen = open[i];
           return (
             <button
-              key={i}
+              type="button"
+              key={`envelope-${i}`}
               onClick={() => setOpen({ ...open, [i]: !isOpen })}
               className="glass group relative overflow-hidden rounded-2xl p-6 text-left transition-all hover:shadow-glow cursor-pointer"
             >
@@ -617,6 +650,7 @@ function Memories({ onHeartTaps }: { onHeartTaps: () => void }) {
       </div>
       <div className="mt-10 flex justify-center">
         <button
+          type="button"
           onClick={tapHeart}
           aria-label="Coração escondido"
           className="rounded-full p-3 opacity-40 transition-all hover:opacity-100 cursor-pointer"
@@ -659,23 +693,23 @@ function FinalSurprise({ finalMessage }: { finalMessage: string }) {
         <AnimatePresence>
           {exploded && mounted && (
             <div className="pointer-events-none absolute inset-0 z-10">
-              {Array.from({ length: 40 }).map((_, i) => {
-                const x = (Math.random() - 0.5) * 600;
-                const y = -(Math.random() * 500 + 100);
-                const rotate = Math.random() * 360;
-                const delay = Math.random() * 0.3;
-                return (
+              {HEART_BURST_PARTICLES.map((particle) => (
                   <motion.div
-                    key={i}
+                    key={particle.id}
                     initial={{ x: 0, y: 0, opacity: 1, scale: 0 }}
-                    animate={{ x, y, opacity: 0, scale: 1.4, rotate }}
-                    transition={{ duration: 1.8, delay, ease: "easeOut" }}
+                    animate={{
+                      x: particle.x,
+                      y: particle.y,
+                      opacity: 0,
+                      scale: 1.4,
+                      rotate: particle.rotate,
+                    }}
+                    transition={{ duration: 1.8, delay: particle.delay, ease: "easeOut" }}
                     className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
                   >
                     <Heart className="h-6 w-6 fill-accent text-accent drop-shadow-[0_0_8px_var(--romance)]" />
                   </motion.div>
-                );
-              })}
+              ))}
             </div>
           )}
         </AnimatePresence>
@@ -733,6 +767,7 @@ function SecretModal({
             className="glass relative w-full max-w-lg overflow-hidden rounded-3xl p-8 text-center shadow-glow"
           >
             <button
+              type="button"
               onClick={onClose}
               className="absolute right-4 top-4 rounded-full p-1 text-muted-foreground hover:text-foreground cursor-pointer"
             >
@@ -745,6 +780,7 @@ function SecretModal({
             <p className="mt-6 font-letter text-xl italic leading-relaxed">{message}</p>
             {kind === "video" && (
               <button
+                type="button"
                 onClick={() => {
                   onAction?.();
                   onClose();
