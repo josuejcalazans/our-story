@@ -50,8 +50,8 @@ import {
   type MemoryEnvelope,
 } from "@/lib/use-site-content";
 import IconPicker from "@/components/IconPicker";
-import { StoryDatePicker, StoryDateTextPicker } from "@/components/StoryDate";
-import { formatAccessPassword } from "@/lib/page-gate";
+import { GatePasswordPreview, StoryDatePicker, StoryDateTextPicker } from "@/components/StoryDate";
+import { parseStoryDate, toDateOnlyString } from "@/lib/story-date";
 import { SEED_MEMORY_ENVELOPES, SEED_PLACES } from "@/lib/content-seeds";
 import { useQueryClient } from "@tanstack/react-query";
 import OurStory from "@/components/OurStory";
@@ -1460,8 +1460,12 @@ function SettingsEditor() {
     setSaving(false);
   }
 
-  const gateDate = form.access_date ?? form.relationship_start.slice(0, 10);
-  const gatePassword = formatAccessPassword(gateDate);
+  const gateDate =
+    form.access_date ??
+    (() => {
+      const d = parseStoryDate(form.relationship_start);
+      return d ? toDateOnlyString(d) : form.relationship_start.slice(0, 10);
+    })();
 
   return (
     <div className="glass space-y-6 rounded-2xl p-6">
@@ -1488,22 +1492,17 @@ function SettingsEditor() {
           />
         </div>
         {form.page_gate_enabled && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <label htmlFor="access-date" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
-                Nosso dia (data da senha)
-              </label>
-              <StoryDatePicker
-                value={gateDate}
-                onChange={(access_date) => setForm({ ...form, access_date })}
-                placeholder="Escolher nosso dia"
-              />
-            </div>
-            <div className="flex flex-col justify-end rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Senha gerada</p>
-              <p className="mt-1 font-mono text-lg text-primary">{gatePassword || "—"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Compartilhe só com quem deve entrar.</p>
-            </div>
+          <div className="space-y-4 rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/5">
+            <label htmlFor="access-date" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+              Nosso dia (data da senha)
+            </label>
+            <StoryDatePicker
+              variant="compact"
+              value={gateDate}
+              onChange={(access_date) => setForm({ ...form, access_date })}
+              placeholder="Escolher nosso dia"
+            />
+            <GatePasswordPreview dateValue={gateDate} />
           </div>
         )}
       </div>

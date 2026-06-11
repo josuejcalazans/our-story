@@ -9,6 +9,7 @@ import {
   isGateUnlocked,
   unlockGate,
 } from "@/lib/page-gate";
+import { parseStoryDate, toDateOnlyString } from "@/lib/story-date";
 
 export default function PageGate({ children }: { children: React.ReactNode }) {
   const { data: settings, isLoading } = useSettings();
@@ -25,7 +26,12 @@ export default function PageGate({ children }: { children: React.ReactNode }) {
   }
 
   const gateEnabled = settings?.page_gate_enabled ?? false;
-  const accessDate = settings?.access_date ?? settings?.relationship_start?.slice(0, 10);
+  const accessDate = (() => {
+    if (settings?.access_date) return settings.access_date;
+    if (!settings?.relationship_start) return null;
+    const d = parseStoryDate(settings.relationship_start);
+    return d ? toDateOnlyString(d) : settings.relationship_start.slice(0, 10);
+  })();
 
   if (!gateEnabled || unlocked) {
     return <>{children}</>;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarHeart, ChevronDown, Clock3 } from "lucide-react";
+import { CalendarHeart, ChevronDown, Clock3, KeyRound } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -124,17 +124,65 @@ function InlineCalendarPanel({
   );
 }
 
+export function GatePasswordPreview({ dateValue }: { dateValue: string }) {
+  const parsed = parseStoryDate(dateValue);
+  if (!parsed) {
+    return (
+      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-5 py-8 text-center text-sm text-muted-foreground">
+        Escolha uma data para gerar a senha
+      </div>
+    );
+  }
+
+  const day = String(parsed.getDate()).padStart(2, "0");
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const year = String(parsed.getFullYear());
+  const password = `${day}${month}${year}`;
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/15 via-white/[0.03] to-accent/10 p-5 ring-1 ring-primary/20">
+      <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary/10 blur-2xl" />
+      <div className="relative flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.28em] text-muted-foreground">
+        <KeyRound className="h-3.5 w-3.5 text-accent" aria-hidden />
+        Senha para compartilhar
+      </div>
+      <div className="relative mt-4 flex items-center justify-center gap-3">
+        <div className="text-center">
+          <p className="font-display text-4xl leading-none text-glow">{day}</p>
+          <p className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">dia</p>
+        </div>
+        <span className="pb-4 text-xl text-accent/60">♥</span>
+        <div className="text-center">
+          <p className="font-display text-4xl leading-none text-glow">{month}</p>
+          <p className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">mês</p>
+        </div>
+        <span className="pb-4 text-xl text-accent/60">♥</span>
+        <div className="text-center">
+          <p className="font-display text-4xl leading-none text-glow">{year}</p>
+          <p className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground">ano</p>
+        </div>
+      </div>
+      <p className="relative mt-5 text-center font-mono text-lg tracking-[0.4em] text-primary">{password}</p>
+      <p className="relative mt-2 text-center text-xs text-muted-foreground">
+        Formato <span className="font-mono">DDMMYYYY</span> · só para quem deve entrar
+      </p>
+    </div>
+  );
+}
+
 export function StoryDatePicker({
   value,
   onChange,
   mode = "date",
   placeholder = "Escolher data",
+  variant = "default",
   className,
 }: {
   value: string | null | undefined;
   onChange: (value: string | null) => void;
   mode?: "date" | "datetime";
   placeholder?: string;
+  variant?: "default" | "compact";
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -181,7 +229,9 @@ export function StoryDatePicker({
           <CalendarHeart className="h-4 w-4" aria-hidden />
         </div>
         <div className="min-w-0 flex-1">
-          {label ? (
+          {variant === "compact" && parsed ? (
+            <StoryDateDisplay value={value ?? ""} size="sm" />
+          ) : label ? (
             <>
               <p className="truncate text-sm font-medium text-foreground">{label}</p>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -202,6 +252,7 @@ export function StoryDatePicker({
         <InlineCalendarPanel
           selected={calendarSelected}
           onSelect={pickDate}
+          className={variant === "compact" ? "bg-white/[0.03]" : undefined}
           footer={
             mode === "datetime" ? (
               <div className="flex items-center gap-3 border-t border-white/10 px-4 py-3">
