@@ -839,14 +839,16 @@ function SharePanel() {
                   id="share-logo-upload"
                 />
                 <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full h-20 border-2 border-dashed border-white/10 hover:border-accent/50 flex flex-col gap-2 rounded-xl"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Clique para enviar imagem</span>
-                </Button>
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="flex-1 gap-1.5 text-xs rounded-xl w-full"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={removingBg}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Enviar imagem
+                  </Button>
                 <p className="text-[10px] text-muted-foreground/60 text-center">
                   PNG, JPG, SVG • Máx. 2MB
                 </p>
