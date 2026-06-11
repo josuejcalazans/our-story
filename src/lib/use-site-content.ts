@@ -22,6 +22,10 @@ export type Stat = {
 
 export type ThemeMode = "romantic" | "soft-rose";
 
+function toThemeMode(value: string | null): ThemeMode {
+  return value === "soft-rose" ? "soft-rose" : "romantic";
+}
+
 export type SiteSettings = {
   id: number;
   love_letter: string;
@@ -30,7 +34,7 @@ export type SiteSettings = {
   relationship_start: string;
   secret_message: string;
   hidden_video_url: string;
-  theme_mode: ThemeMode | null;
+  theme_mode: ThemeMode;
 };
 
 export type GalleryImage = {
@@ -78,7 +82,8 @@ export function useSettings() {
         .eq("id", 1)
         .maybeSingle();
       if (error) throw error;
-      return data as SiteSettings | null; // theme_mode from DB is string | null
+      if (!data) return null;
+      return { ...data, theme_mode: toThemeMode(data.theme_mode) };
     },
   });
 }
