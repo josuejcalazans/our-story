@@ -131,6 +131,9 @@ importers:
       lucide-react:
         specifier: ^0.575.0
         version: 0.575.0(react@19.2.7)
+      nitro:
+        specifier: 3.0.260603-beta
+        version: 3.0.260603-beta(chokidar@5.0.0)(jiti@2.7.0)(rollup@4.61.1)(vite@7.3.5(@types/node@22.19.20)(jiti@2.7.0)(lightningcss@1.32.0))
       qr-code-styling:
         specifier: ^1.9.2
         version: 1.9.2
@@ -210,9 +213,6 @@ importers:
       globals:
         specifier: ^15.15.0
         version: 15.15.0
-      nitro:
-        specifier: 3.0.260603-beta
-        version: 3.0.260603-beta(chokidar@5.0.0)(jiti@2.7.0)(rollup@4.61.1)(vite@7.3.5(@types/node@22.19.20)(jiti@2.7.0)(lightningcss@1.32.0))
       prettier:
         specifier: ^3.7.3
         version: 3.8.4
