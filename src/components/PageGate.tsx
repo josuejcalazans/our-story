@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Heart, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import StoryHeartbeatLoader from "@/components/StoryHeartbeatLoader";
 import { useSettings } from "@/lib/use-site-content";
 import {
   checkGatePassword,
@@ -18,11 +19,7 @@ export default function PageGate({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState(false);
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Heart className="h-8 w-8 animate-pulse fill-accent text-accent" />
-      </div>
-    );
+    return <StoryHeartbeatLoader />;
   }
 
   const gateEnabled = settings?.page_gate_enabled ?? false;

@@ -96,45 +96,29 @@ function InlineCalendarPanel({
   onSelect,
   footer,
   className,
-  fullWidth = false,
 }: {
   selected?: Date;
   onSelect: (date: Date) => void;
   footer?: React.ReactNode;
   className?: string;
-  fullWidth?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-2xl border border-white/10 bg-card/80 shadow-glow",
-        fullWidth && "w-full",
+        "w-fit max-w-full overflow-hidden rounded-2xl border border-white/10 bg-card/80 shadow-glow",
         className,
       )}
     >
-      <div className={cn(fullWidth && "flex w-full justify-center px-2 py-2")}>
-        <Calendar
-          mode="single"
-          selected={selected}
-          defaultMonth={selected}
-          onSelect={(date) => {
-            if (date) onSelect(toCalendarDate(date));
-          }}
-          locale={ptBR}
-          className={cn("rounded-2xl p-2 sm:p-3", fullWidth && "w-full")}
-          classNames={
-            fullWidth
-              ? {
-                  root: "w-full",
-                  month: "w-full gap-3",
-                  month_grid: "w-full",
-                  weekdays: "w-full",
-                  week: "mt-2 flex w-full justify-between",
-                }
-              : undefined
-          }
-        />
-      </div>
+      <Calendar
+        mode="single"
+        selected={selected}
+        defaultMonth={selected}
+        onSelect={(date) => {
+          if (date) onSelect(toCalendarDate(date));
+        }}
+        locale={ptBR}
+        className="rounded-2xl p-2 sm:p-3"
+      />
       {footer}
     </div>
   );
@@ -281,7 +265,6 @@ export function StoryDatePicker({
         <InlineCalendarPanel
           selected={calendarSelected}
           onSelect={pickDate}
-          fullWidth={variant === "compact"}
           className={variant === "compact" ? "border-primary/15 bg-white/[0.02]" : undefined}
           footer={
             mode === "datetime" ? (
