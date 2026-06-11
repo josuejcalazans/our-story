@@ -70,37 +70,34 @@ function thump(
   harm.stop(time + decaySec * 0.5 + 0.04);
 }
 
-/** Agenda todos os batimentos do loader de uma vez — sem loop */
+/**
+ * Agenda batimentos no relógio do AudioContext (confiável no Safari iOS).
+ * Retorna função vazia — os osciladores param sozinhos.
+ */
 export function scheduleLoaderHeartbeat(
   ctx: AudioContext,
   master: GainNode,
   getElapsedMs: () => number,
 ) {
   const schedule = buildBeatSchedule();
-  const timers: ReturnType<typeof setTimeout>[] = [];
   const elapsed = getElapsedMs();
+  const audioBase = ctx.currentTime + 0.02;
 
   for (const pulse of schedule) {
-    const delayMs = pulse.atMs - elapsed;
-    if (delayMs < -80) continue;
+    const delaySec = (pulse.atMs - elapsed) / 1000;
+    if (delaySec < -0.1) continue;
 
+    const when = audioBase + Math.max(0, delaySec);
     const fast = pulse.atMs >= HEARTBEAT_ACCELERATE_AT_MS;
     const spec =
       pulse.kind === "lub"
         ? { hz: 62, gain: fast ? 0.28 : 0.32, decay: fast ? 0.09 : 0.2 }
         : { hz: 48, gain: fast ? 0.12 : 0.14, decay: fast ? 0.07 : 0.16 };
 
-    const id = window.setTimeout(
-      () => {
-        if (ctx.state !== "running") return;
-        thump(ctx, master, ctx.currentTime + 0.008, spec.hz, spec.gain, spec.decay);
-      },
-      Math.max(0, delayMs),
-    );
-    timers.push(id);
+    thump(ctx, master, when, spec.hz, spec.gain, spec.decay);
   }
 
-  return () => timers.forEach((id) => window.clearTimeout(id));
+  return () => {};
 }
 
 export { getLubDubOffsetsSec };

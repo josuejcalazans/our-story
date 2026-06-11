@@ -17,10 +17,13 @@ function useLoaderElapsedMs() {
   const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
-    const tick = () => setElapsedMs(performance.now() - startRef.current);
-    tick();
-    const id = window.setInterval(tick, 32);
-    return () => window.clearInterval(id);
+    let raf = 0;
+    const tick = () => {
+      setElapsedMs(performance.now() - startRef.current);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   return { elapsedMs, getElapsedMs: useCallback(() => performance.now() - startRef.current, []) };
@@ -55,20 +58,24 @@ export default function StoryHeartbeatLoader({
   }, [elapsedMs, beatSchedule]);
 
   const { muted, unlocked, needsTap, mute, unmuteFromGesture, unlockFromGesture } =
-    useHeartbeatSound(sound, getElapsedMs);
+    useHeartbeatSound(getElapsedMs, sound);
+
+  const handleUnlock = useCallback(() => {
+    if (sound && !muted) unlockFromGesture();
+  }, [sound, muted, unlockFromGesture]);
 
   return (
     <div
-      className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-background"
-      onPointerDown={() => {
-        if (sound && !muted) unlockFromGesture();
-      }}
+      className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-background touch-manipulation"
+      onTouchStart={handleUnlock}
+      onPointerDown={handleUnlock}
       role="presentation"
     >
       <div className="absolute inset-0 bg-glow" />
 
       <button
         type="button"
+        onTouchStart={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();

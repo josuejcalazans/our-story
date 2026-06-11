@@ -24,8 +24,6 @@ export function getHeartbeatCycleMs(elapsedMs: number): number {
 
   const rampMs = STORY_LOADER_MIN_MS - HEARTBEAT_ACCELERATE_AT_MS;
   const t = Math.min(1, (elapsedMs - HEARTBEAT_ACCELERATE_AT_MS) / rampMs);
-
-  // Cai rápido logo aos 3s e termina em corrida (evita t^5 que travava lento)
   const eased = t ** 0.65;
 
   return Math.round(
@@ -34,21 +32,11 @@ export function getHeartbeatCycleMs(elapsedMs: number): number {
   );
 }
 
-/** Revelação da linha: devagar até 3s, depois corre */
+/** Posição na linha = tempo (batimentos e desenho no mesmo lugar) */
 export function getEcgDrawProgress(elapsedMs: number): number {
   if (elapsedMs >= STORY_LOADER_MIN_MS) return 1;
   if (elapsedMs <= 0) return 0;
-
-  const slowShare = 0.14;
-
-  if (elapsedMs < HEARTBEAT_ACCELERATE_AT_MS) {
-    return slowShare * (elapsedMs / HEARTBEAT_ACCELERATE_AT_MS);
-  }
-
-  const t =
-    (elapsedMs - HEARTBEAT_ACCELERATE_AT_MS) /
-    (STORY_LOADER_MIN_MS - HEARTBEAT_ACCELERATE_AT_MS);
-  return slowShare + (1 - slowShare) * t ** 0.7;
+  return elapsedMs / STORY_LOADER_MIN_MS;
 }
 
 export function timeToPathX(ms: number, pathWidth: number): number {
@@ -77,43 +65,45 @@ function beatWidthPx(
   pathWidth: number,
 ): number {
   const lub = lubs[index];
-  if (!lub) return 60;
+  if (!lub) return 48;
   const cx = timeToPathX(lub.atMs, pathWidth);
   const next = lubs[index + 1];
-  if (!next) return Math.min(95, Math.max(40, pathWidth - cx - 8));
+  if (!next) return Math.min(72, Math.max(28, pathWidth - cx - 4));
   const nextCx = timeToPathX(next.atMs, pathWidth);
-  return Math.max(26, Math.min(105, (nextCx - cx) * 0.9));
+  const gap = nextCx - cx;
+  return Math.max(16, Math.min(72, gap * 0.82));
 }
 
-/** Complexo P → QRS → T (formato clássico do ECG) */
+/** Complexo P → QRS → T — pico principal (R) em cx = instante do lub */
 function appendEcgComplex(cx: number, w: number): string {
   const y = BASELINE_Y;
-  const x = (f: number) => cx + f * w;
+  const x = (f: number) => (cx + f * w).toFixed(1);
 
   return [
-    `H${x(-0.44).toFixed(1)}`,
-    `L${x(-0.36).toFixed(1)} ${y - 3}`,
-    `L${x(-0.28).toFixed(1)} ${y}`,
-    `L${x(-0.20).toFixed(1)} ${y + 2}`,
-    `L${x(-0.11).toFixed(1)} ${y - 22}`,
-    `L${x(-0.03).toFixed(1)} ${y + 20}`,
-    `L${x(0.05).toFixed(1)} ${y}`,
-    `L${x(0.12).toFixed(1)} ${y - 5}`,
-    `L${x(0.20).toFixed(1)} ${y}`,
+    `H${x(-0.5)}`,
+    `L${x(-0.38)} ${y - 3}`,
+    `L${x(-0.28)} ${y}`,
+    `L${x(-0.16)} ${y + 3}`,
+    `L${x(-0.05)} ${y - 22}`,
+    `L${x(0)} ${y + 18}`,
+    `L${x(0.08)} ${y}`,
+    `L${x(0.16)} ${y - 4}`,
+    `L${x(0.26)} ${y}`,
   ].join(" ");
 }
 
-/** Linha contínua: baseline plana no início, picos mais próximos com o tempo */
+/** Linha contínua: baseline plana, picos alinhados ao tempo de cada lub */
 export function buildEcgPath(schedule: BeatPulse[], pathWidth = 1000): string {
   const lubs = schedule.filter((b) => b.kind === "lub");
   if (lubs.length === 0) return `M 0 ${BASELINE_Y} H ${pathWidth}`;
 
   const first = lubs[0];
   if (!first) return `M 0 ${BASELINE_Y} H ${pathWidth}`;
+
   const firstCx = timeToPathX(first.atMs, pathWidth);
   const firstW = beatWidthPx(lubs, 0, pathWidth);
 
-  let d = `M 0 ${BASELINE_Y} H ${Math.max(0, firstCx - firstW * 0.48).toFixed(1)}`;
+  let d = `M 0 ${BASELINE_Y} H ${Math.max(0, firstCx - firstW * 0.52).toFixed(1)}`;
 
   for (let i = 0; i < lubs.length; i++) {
     const lub = lubs[i];
@@ -126,9 +116,9 @@ export function buildEcgPath(schedule: BeatPulse[], pathWidth = 1000): string {
     if (next) {
       const nextCx = timeToPathX(next.atMs, pathWidth);
       const nextW = beatWidthPx(lubs, i + 1, pathWidth);
-      const flatEnd = nextCx - nextW * 0.44;
-      const complexEnd = cx + w * 0.2;
-      if (flatEnd > complexEnd + 2) {
+      const flatEnd = nextCx - nextW * 0.52;
+      const complexEnd = cx + w * 0.28;
+      if (flatEnd > complexEnd + 1) {
         d += ` H ${flatEnd.toFixed(1)}`;
       }
     }
@@ -144,7 +134,7 @@ export function getHeartScale(elapsedMs: number, schedule: BeatPulse[]): number 
   for (const pulse of schedule) {
     const dt = elapsedMs - pulse.atMs;
     const fast = pulse.atMs >= HEARTBEAT_ACCELERATE_AT_MS;
-    const window = pulse.kind === "lub" ? (fast ? 140 : 300) : fast ? 100 : 220;
+    const window = pulse.kind === "lub" ? (fast ? 120 : 280) : fast ? 90 : 200;
     const peak = pulse.kind === "lub" ? 0.28 : 0.12;
     if (dt < 0 || dt > window) continue;
     const x = dt / window;
