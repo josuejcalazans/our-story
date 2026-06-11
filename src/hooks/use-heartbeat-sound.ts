@@ -1,90 +1,51 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  createAudioContext,
-  createHeartbeatBus,
-  playHeartbeatBeat,
-} from "@/lib/heartbeat-sound";
+  getHeartbeatSession,
+  isHeartbeatAudioStopped,
+  isHeartbeatAudioUnlocked,
+  setHeartbeatMuted,
+  stopHeartbeatAudioSession,
+  unlockHeartbeatAudio,
+} from "@/lib/heartbeat-audio-session";
+import { playHeartbeatBeat } from "@/lib/heartbeat-sound";
 
 export function useHeartbeatSound(enabled = true) {
-  const ctxRef = useRef<AudioContext | null>(null);
-  const masterRef = useRef<GainNode | null>(null);
-  const unlockedRef = useRef(false);
-  const mutedRef = useRef(false);
+  const enabledRef = useRef(enabled);
   const [muted, setMuted] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
 
+  enabledRef.current = enabled;
+  const mutedRef = useRef(muted);
   mutedRef.current = muted;
-  unlockedRef.current = unlocked;
-
-  const ensureContext = useCallback(() => {
-    if (!ctxRef.current || ctxRef.current.state === "closed") {
-      const ctx = createAudioContext();
-      const { master } = createHeartbeatBus(ctx);
-      ctxRef.current = ctx;
-      masterRef.current = master;
-    }
-    const master = masterRef.current;
-    if (!master) throw new Error("Audio master não inicializado");
-    return { ctx: ctxRef.current, master };
-  }, []);
 
   const stopAll = useCallback(() => {
-    if (ctxRef.current && ctxRef.current.state !== "closed") {
-      void ctxRef.current.close();
-    }
-    ctxRef.current = null;
-    masterRef.current = null;
-    unlockedRef.current = false;
-    setUnlocked(false);
+    stopHeartbeatAudioSession();
+    setMuted(false);
   }, []);
 
-  /** Deve rodar sincronamente no gesto do usuário (touch/click) — exigido no iOS. */
-  const unlockFromGesture = useCallback(async () => {
-    if (!enabled || mutedRef.current || typeof window === "undefined") return;
-
-    try {
-      const { ctx, master } = ensureContext();
-
-      if (ctx.state !== "running") {
-        await ctx.resume();
-      }
-
-      const buffer = ctx.createBuffer(1, 1, 22050);
-      const ping = ctx.createBufferSource();
-      ping.buffer = buffer;
-      ping.connect(ctx.destination);
-      ping.start();
-
-      master.gain.value = 0.5;
-      unlockedRef.current = true;
-      setUnlocked(true);
-    } catch {
-      /* Web Audio indisponível */
+  const playBeat = useCallback((bpm: number) => {
+    if (
+      !enabledRef.current ||
+      mutedRef.current ||
+      !isHeartbeatAudioUnlocked() ||
+      isHeartbeatAudioStopped()
+    ) {
+      return;
     }
-  }, [enabled, ensureContext]);
 
-  const playBeat = useCallback(
-    (bpm: number) => {
-      if (!enabled || mutedRef.current || !unlockedRef.current) return;
-      const ctx = ctxRef.current;
-      const master = masterRef.current;
-      if (!ctx || !master) return;
-      playHeartbeatBeat(ctx, master, bpm);
-    },
-    [enabled],
-  );
+    const session = getHeartbeatSession();
+    if (!session || session.ctx.state !== "running") return;
+    playHeartbeatBeat(session.ctx, session.master, bpm);
+  }, []);
 
   const mute = useCallback(() => {
     setMuted(true);
-    mutedRef.current = true;
-    if (masterRef.current) masterRef.current.gain.value = 0;
+    setHeartbeatMuted(true);
   }, []);
 
-  const unmuteFromGesture = useCallback(() => {
+  const unmute = useCallback(() => {
     setMuted(false);
-    mutedRef.current = false;
-    void unlockFromGesture();
-  }, [unlockFromGesture]);
+    setHeartbeatMuted(false);
+  }, []);
 
   useEffect(() => {
     if (!enabled) {
@@ -96,11 +57,10 @@ export function useHeartbeatSound(enabled = true) {
 
   return {
     muted,
-    unlocked,
-    needsTap: enabled && !unlocked && !muted,
     mute,
-    unmuteFromGesture,
-    unlockFromGesture,
+    unmute,
     playBeat,
+    stopAll,
+    unlockFromGesture: unlockHeartbeatAudio,
   };
 }

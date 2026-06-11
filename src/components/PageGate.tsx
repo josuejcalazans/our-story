@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import StoryHeartbeatLoader, { STORY_LOADER_MIN_MS } from "@/components/StoryHeartbeatLoader";
+import StoryIntroSequence from "@/components/StoryIntroSequence";
 import { useSettings } from "@/lib/use-site-content";
 import {
   checkGatePassword,
@@ -17,15 +17,21 @@ export default function PageGate({ children }: { children: React.ReactNode }) {
   const [unlocked, setUnlocked] = useState(isGateUnlocked);
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
-  const [minLoaderDone, setMinLoaderDone] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setMinLoaderDone(true), STORY_LOADER_MIN_MS);
-    return () => clearTimeout(timer);
-  }, []);
+  if (!introDone) {
+    return <StoryIntroSequence onComplete={() => setIntroDone(true)} />;
+  }
 
-  if (isLoading || !minLoaderDone) {
-    return <StoryHeartbeatLoader />;
+  if (isLoading) {
+    return (
+      <div className="relative flex min-h-[100svh] items-center justify-center bg-background">
+        <div className="absolute inset-0 bg-glow" />
+        <p className="relative z-10 font-letter text-sm italic text-muted-foreground">
+          Quase lá...
+        </p>
+      </div>
+    );
   }
 
   const gateEnabled = settings?.page_gate_enabled ?? false;

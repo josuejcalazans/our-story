@@ -14,11 +14,14 @@ import {
 
 export { STORY_LOADER_MIN_MS };
 
-function useLoaderElapsedMs() {
+function useLoaderElapsedMs(active: boolean) {
   const startRef = useRef(performance.now());
   const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
+    if (!active) return;
+    startRef.current = performance.now();
+    setElapsedMs(0);
     let raf = 0;
     const tick = () => {
       setElapsedMs(performance.now() - startRef.current);
@@ -26,33 +29,50 @@ function useLoaderElapsedMs() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [active]);
 
-  return { elapsedMs, getElapsedMs: useCallback(() => performance.now() - startRef.current, []) };
+  return {
+    elapsedMs,
+    getElapsedMs: useCallback(() => performance.now() - startRef.current, []),
+  };
 }
 
 export default function StoryHeartbeatLoader({
-  message = "Preparando nossa história...",
+  message = "Algo está batendo mais forte...",
   sound = true,
+  onComplete,
 }: {
   message?: string;
   sound?: boolean;
+  onComplete?: () => void;
 }) {
-  const { elapsedMs, getElapsedMs } = useLoaderElapsedMs();
+  const { elapsedMs, getElapsedMs } = useLoaderElapsedMs(true);
   const running = elapsedMs < STORY_LOADER_MIN_MS;
   const accelerating = elapsedMs >= HEARTBEAT_ACCELERATE_AT_MS;
+  const completedRef = useRef(false);
 
   const [beatKey, setBeatKey] = useState(0);
   const [heartScale, setHeartScale] = useState(1);
   const [rippleKey, setRippleKey] = useState(0);
 
-  const { muted, unlocked, needsTap, mute, unmuteFromGesture, unlockFromGesture, playBeat } =
-    useHeartbeatSound(sound);
+  const { muted, mute, unmute, playBeat, stopAll } = useHeartbeatSound(sound && running);
 
   const playBeatRef = useRef(playBeat);
   playBeatRef.current = playBeat;
 
-  /** Agenda batimentos com setTimeout — mesma fórmula do demo */
+  useEffect(() => {
+    if (!running) stopAll();
+  }, [running, stopAll]);
+
+  useEffect(() => () => stopAll(), [stopAll]);
+
+  useEffect(() => {
+    if (elapsedMs < STORY_LOADER_MIN_MS || completedRef.current) return;
+    completedRef.current = true;
+    stopAll();
+    onComplete?.();
+  }, [elapsedMs, onComplete, stopAll]);
+
   useEffect(() => {
     if (!running) return;
 
@@ -61,6 +81,7 @@ export default function StoryHeartbeatLoader({
 
     const scheduleNext = () => {
       if (cancelled) return;
+
       const elapsed = getElapsedMs();
       if (elapsed >= STORY_LOADER_MIN_MS) return;
 
@@ -74,8 +95,10 @@ export default function StoryHeartbeatLoader({
       setHeartScale(scale);
       setTimeout(() => setHeartScale(1), 85);
 
+      if (cancelled || getElapsedMs() >= STORY_LOADER_MIN_MS) return;
       playBeatRef.current(bpm);
 
+      if (cancelled) return;
       beatTimeout = setTimeout(scheduleNext, cycleMs);
     };
 
@@ -87,30 +110,22 @@ export default function StoryHeartbeatLoader({
     };
   }, [running, getElapsedMs]);
 
-  const handleUnlock = useCallback(() => {
-    if (sound && !muted) unlockFromGesture();
-  }, [sound, muted, unlockFromGesture]);
-
   return (
     <div
       className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-background touch-manipulation"
-      onTouchStart={handleUnlock}
-      onPointerDown={handleUnlock}
       role="presentation"
     >
       <div className="absolute inset-0 bg-glow" />
 
       <button
         type="button"
-        onTouchStart={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
-          if (muted) unmuteFromGesture();
+          if (muted) unmute();
           else mute();
         }}
         aria-label={muted ? "Ativar som do coração" : "Silenciar som do coração"}
-        className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground cursor-pointer"
+        className="absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground opacity-20 transition-opacity hover:bg-white/10 hover:text-foreground hover:opacity-100 focus-visible:opacity-100 cursor-pointer"
       >
         {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
       </button>
@@ -164,22 +179,6 @@ export default function StoryHeartbeatLoader({
           >
             O coração acelera...
           </motion.p>
-        )}
-
-        {sound && needsTap && (
-          <motion.p
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-full border border-accent/25 bg-accent/10 px-4 py-2 text-center text-xs text-accent"
-          >
-            Toque em qualquer lugar para ouvir o coração
-          </motion.p>
-        )}
-
-        {sound && unlocked && !muted && (
-          <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/50">
-            Batimento ativo
-          </p>
         )}
       </div>
     </div>
