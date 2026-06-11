@@ -1,6 +1,11 @@
 import { motion } from "framer-motion";
 import { Heart } from "lucide-react";
 
+/** Tempo mínimo na tela antes de mostrar senha ou história */
+export const STORY_LOADER_MIN_MS = 3200;
+
+const BEAT_DURATION = 2.4;
+
 export default function StoryHeartbeatLoader({
   message = "Preparando nossa história...",
 }: {
@@ -14,7 +19,7 @@ export default function StoryHeartbeatLoader({
           className="relative flex h-20 w-20 items-center justify-center"
           animate={{ scale: [1, 1.28, 1, 1.14, 1, 1.06, 1] }}
           transition={{
-            duration: 1.35,
+            duration: BEAT_DURATION,
             repeat: Number.POSITIVE_INFINITY,
             ease: "easeInOut",
             times: [0, 0.12, 0.22, 0.34, 0.44, 0.58, 1],
@@ -25,7 +30,7 @@ export default function StoryHeartbeatLoader({
             className="absolute inset-0 rounded-full border border-accent/50"
             animate={{ scale: [0.85, 1.55], opacity: [0.55, 0] }}
             transition={{
-              duration: 1.35,
+              duration: BEAT_DURATION,
               repeat: Number.POSITIVE_INFINITY,
               ease: "easeOut",
               times: [0.1, 1],
@@ -35,10 +40,10 @@ export default function StoryHeartbeatLoader({
             className="absolute inset-0 rounded-full border border-primary/40"
             animate={{ scale: [0.9, 1.35], opacity: [0.4, 0] }}
             transition={{
-              duration: 1.35,
+              duration: BEAT_DURATION,
               repeat: Number.POSITIVE_INFINITY,
               ease: "easeOut",
-              delay: 0.28,
+              delay: 0.45,
               times: [0.1, 1],
             }}
           />
@@ -74,7 +79,7 @@ export default function StoryHeartbeatLoader({
         <motion.p
           className="font-letter text-center text-sm italic text-muted-foreground"
           animate={{ opacity: [0.45, 1, 0.45] }}
-          transition={{ duration: 2.2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+          transition={{ duration: 3.2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
         >
           {message}
         </motion.p>

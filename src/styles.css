@@ -128,7 +128,7 @@
   }
   .ecg-line {
     stroke-dasharray: 320;
-    animation: ecg-draw 1.35s linear infinite;
+    animation: ecg-draw 2.4s linear infinite;
   }
   .ecg-scan-line {
     background: linear-gradient(
@@ -137,7 +137,7 @@
       oklch(0.74 0.21 350 / 0.35),
       transparent
     );
-    animation: ecg-scan 1.35s linear infinite;
+    animation: ecg-scan 2.4s linear infinite;
   }
 }
 

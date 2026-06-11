@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import StoryHeartbeatLoader from "@/components/StoryHeartbeatLoader";
+import StoryHeartbeatLoader, { STORY_LOADER_MIN_MS } from "@/components/StoryHeartbeatLoader";
 import { useSettings } from "@/lib/use-site-content";
 import {
   checkGatePassword,
@@ -17,8 +17,14 @@ export default function PageGate({ children }: { children: React.ReactNode }) {
   const [unlocked, setUnlocked] = useState(isGateUnlocked);
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
+  const [minLoaderDone, setMinLoaderDone] = useState(false);
 
-  if (isLoading) {
+  useEffect(() => {
+    const timer = setTimeout(() => setMinLoaderDone(true), STORY_LOADER_MIN_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isLoading || !minLoaderDone) {
     return <StoryHeartbeatLoader />;
   }
 
