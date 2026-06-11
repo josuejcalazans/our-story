@@ -11,7 +11,19 @@ import {
   LOVE_LETTER as FALLBACK_LETTER,
   FINAL_MESSAGE as FALLBACK_FINAL,
 } from "@/lib/love-data";
-import { useTimeline, useStats, useSettings, useGallery, usePlaces, useMemoryEnvelopes } from "@/lib/use-site-content";
+import {
+  useTimeline,
+  useStats,
+  useSettings,
+  useGallery,
+  usePlaces,
+  useMemoryEnvelopes,
+  useLoveNotes,
+} from "@/lib/use-site-content";
+import { useRomanceMusic } from "@/hooks/use-romance-music";
+import RomanceMusicPlayer from "@/components/story/RomanceMusicPlayer";
+import MessageWall from "@/components/story/MessageWall";
+import CinematicEnding from "@/components/story/CinematicEnding";
 import { StoryIcon } from "@/lib/story-icons";
 import { StoryDateDisplay } from "@/components/StoryDate";
 import {
@@ -42,29 +54,6 @@ function createSeededParticles(count: number) {
 }
 
 const HERO_PARTICLES = createSeededParticles(30);
-
-function createBurstHearts(count: number) {
-  let seed = 0xb1a57e9;
-  const rand = () => {
-    seed ^= seed << 13;
-    seed ^= seed >>> 17;
-    seed ^= seed << 5;
-    return (seed >>> 0) / 4294967296;
-  };
-
-  return Array.from({ length: count }, () => {
-    const id = `burst-${(seed >>> 0).toString(16)}`;
-    return {
-      id,
-      x: (rand() - 0.5) * 600,
-      y: -(rand() * 500 + 100),
-      rotate: rand() * 360,
-      delay: rand() * 0.3,
-    };
-  });
-}
-
-const HEART_BURST_PARTICLES = createBurstHearts(40);
 
 function Particles() {
   const [mounted, setMounted] = useState(false);
@@ -180,7 +169,7 @@ function Hero({
           />
         </h1>
         <p className="mx-auto mt-6 max-w-md font-letter text-xl italic text-muted-foreground sm:text-2xl">
-          Preparei algo especial para você.
+          Existe uma história que só nós dois conhecemos.
         </p>
         <motion.button
           whileHover={{ scale: 1.05 }}
@@ -188,7 +177,7 @@ function Hero({
           onClick={onStart}
           className="group mt-12 inline-flex items-center gap-3 rounded-full bg-primary px-8 py-4 text-sm font-medium text-primary-foreground shadow-glow transition-all hover:bg-primary/90 cursor-pointer sm:text-base"
         >
-          Começar nossa história
+          Começar nossa jornada
           <ArrowDown className="h-4 w-4 transition-transform group-hover:translate-y-1" />
         </motion.button>
       </motion.div>
@@ -330,7 +319,7 @@ function Timeline({
   const [open, setOpen] = useState<number | null>(null);
   return (
     <SectionShell>
-      <SectionTitle eyebrow="Capítulo 03" title="Linha do tempo" />
+      <SectionTitle eyebrow="Capítulo 03" title="Nossa História" />
       <div className="relative mt-16">
         <div className="absolute left-4 top-0 h-full w-px bg-gradient-to-b from-primary/0 via-primary/70 to-primary/0 sm:left-1/2" />
         <div className="space-y-10">
@@ -510,7 +499,7 @@ function Gallery() {
 
   return (
     <SectionShell>
-      <SectionTitle eyebrow="Capítulo 05" title="Galeria de momentos" />
+      <SectionTitle eyebrow="Capítulo 05" title="Nossos momentos" />
       <p className="mx-auto mt-3 max-w-md text-center text-sm text-muted-foreground">
         Passe o mouse e clique na moldura para ampliar.
       </p>
@@ -557,23 +546,35 @@ function Gallery() {
       )}
 
       <Dialog open={lightboxIndex !== null} onOpenChange={(open) => !open && setLightboxIndex(null)}>
-        <DialogContent className="max-w-5xl border-white/10 bg-background/95 p-2 sm:p-4">
+        <DialogContent className="max-h-[100svh] max-w-[100vw] border-none bg-black/95 p-0 sm:max-w-6xl sm:rounded-2xl sm:border sm:border-white/10 sm:p-4">
           <DialogTitle className="sr-only">Foto ampliada</DialogTitle>
           <DialogDescription className="sr-only">
-            {active?.caption || "Visualização da galeria"}
+            {active?.title || active?.caption || "Visualização da galeria"}
           </DialogDescription>
           {active && (
-            <div className="relative">
+            <div className="relative flex min-h-[60vh] flex-col">
               <img
                 src={active.image_url}
-                alt={active.caption || ""}
-                className="max-h-[80vh] w-full rounded-2xl object-contain"
+                alt={active.title || active.caption || ""}
+                className="max-h-[75vh] w-full flex-1 rounded-none object-contain sm:rounded-2xl"
               />
-              {active.caption && (
-                <p className="mt-3 text-center font-letter text-lg italic text-muted-foreground">
-                  {active.caption}
-                </p>
-              )}
+              <div className="space-y-2 p-4 text-center sm:p-2">
+                {(active.title || active.caption) && (
+                  <p className="font-display text-xl text-foreground sm:text-2xl">
+                    {active.title || active.caption}
+                  </p>
+                )}
+                {active.description && (
+                  <p className="font-letter text-base italic text-muted-foreground sm:text-lg">
+                    {active.description}
+                  </p>
+                )}
+                {(active.location || active.taken_at) && (
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground/80">
+                    {[active.taken_at, active.location].filter(Boolean).join(" · ")}
+                  </p>
+                )}
+              </div>
               {list.length > 1 && (
                 <>
                   <button
@@ -685,9 +686,9 @@ function VideoMessage({
 /* ------------------------- Love Letter ------------------------- */
 function LoveLetter({ letter }: { letter: string }) {
   const [text, setText] = useState("");
-  const [started, setStarted] = useState(false);
+  const [opened, setOpened] = useState(false);
   useEffect(() => {
-    if (!started) return;
+    if (!opened) return;
     setText("");
     let i = 0;
     const id = setInterval(() => {
@@ -696,7 +697,7 @@ function LoveLetter({ letter }: { letter: string }) {
       if (i >= letter.length) clearInterval(id);
     }, 28);
     return () => clearInterval(id);
-  }, [started, letter]);
+  }, [opened, letter]);
   return (
     <SectionShell>
       <SectionTitle eyebrow="Capítulo 07" title="Uma carta para você" />
@@ -704,23 +705,50 @@ function LoveLetter({ letter }: { letter: string }) {
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        onViewportEnter={() => setStarted(true)}
-        className="glass mx-auto mt-10 max-w-2xl rounded-3xl p-8 sm:p-12 shadow-soft"
+        className="paper-texture glass mx-auto mt-10 max-w-2xl rounded-3xl border border-white/10 p-8 shadow-soft sm:p-12"
       >
-        <Mail className="h-6 w-6 text-secondary" />
-        <pre className="mt-6 whitespace-pre-wrap font-letter text-xl leading-relaxed text-foreground sm:text-2xl">
-          {text}
-          <span
-            className="ml-0.5 inline-block w-[2px] bg-secondary align-middle"
-            style={{ height: "1em", animation: "blink 1s steps(2) infinite" }}
-          />
-        </pre>
+        {!opened ? (
+          <div className="flex flex-col items-center py-8 text-center">
+            <Mail className="h-10 w-10 text-accent/80" />
+            <p className="mt-4 font-letter text-lg italic text-muted-foreground">
+              Tem algo escrito só para você...
+            </p>
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setOpened(true)}
+              className="mt-8 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-8 py-3 text-sm font-medium text-accent shadow-glow cursor-pointer"
+            >
+              Abrir Carta
+            </motion.button>
+          </div>
+        ) : (
+          <>
+            <Mail className="h-6 w-6 text-secondary" />
+            <pre className="mt-6 whitespace-pre-wrap font-script text-2xl leading-relaxed text-foreground sm:text-3xl">
+              {text}
+              {text.length < letter.length && (
+                <span
+                  className="ml-0.5 inline-block w-[2px] bg-secondary align-middle"
+                  style={{ height: "1em", animation: "blink 1s steps(2) infinite" }}
+                />
+              )}
+            </pre>
+          </>
+        )}
       </motion.div>
     </SectionShell>
   );
 }
 
 /* ------------------------- Memories with heart-tap easter egg ------------------------- */
+function isMemoryUnlocked(e: { is_locked?: boolean; unlock_at?: string | null }) {
+  if (!e.is_locked) return true;
+  if (!e.unlock_at) return false;
+  return new Date(e.unlock_at) <= new Date();
+}
+
 function Memories({
   envelopes,
   onHeartTaps,
@@ -732,6 +760,8 @@ function Memories({
     title: string;
     message: string;
     is_easter_egg?: boolean;
+    is_locked?: boolean;
+    unlock_at?: string | null;
   }[];
   onHeartTaps: () => void;
 }) {
@@ -755,19 +785,23 @@ function Memories({
 
   return (
     <SectionShell>
-      <SectionTitle eyebrow="Capítulo 08" title="Caixa de memórias" />
+      <SectionTitle eyebrow="Capítulo 08" title="Memórias Guardadas" />
       <p className="mx-auto mt-3 max-w-md text-center text-sm text-muted-foreground">
-        Toque em cada envelope.
+        Algumas memórias desbloqueiam com o tempo. Toque nos envelopes abertos.
       </p>
       <div className="mt-10 grid gap-5 sm:grid-cols-2">
         {cards.map((e) => {
+          const unlocked = isMemoryUnlocked(e);
           const isOpen = open[e.id];
           return (
             <button
               type="button"
               key={e.id}
-              onClick={() => setOpen({ ...open, [e.id]: !isOpen })}
-              className="glass group relative overflow-hidden rounded-2xl p-6 text-left transition-all hover:shadow-glow cursor-pointer"
+              disabled={!unlocked}
+              onClick={() => unlocked && setOpen({ ...open, [e.id]: !isOpen })}
+              className={`glass group relative overflow-hidden rounded-2xl p-6 text-left transition-all ${
+                unlocked ? "hover:shadow-glow cursor-pointer" : "cursor-not-allowed opacity-70"
+              }`}
             >
               <motion.div
                 animate={{ rotateY: isOpen ? 180 : 0 }}
@@ -777,11 +811,21 @@ function Memories({
                 {!isOpen ? (
                   <div className="flex items-start gap-4">
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20">
-                      <StoryIcon name={e.icon_name} emoji={e.icon} className="h-5 w-5" />
+                      {unlocked ? (
+                        <StoryIcon name={e.icon_name} emoji={e.icon} className="h-5 w-5" />
+                      ) : (
+                        <Lock className="h-5 w-5" />
+                      )}
                     </div>
                     <div>
                       <h3 className="font-display text-xl">{e.title}</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">Toque para abrir</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {unlocked
+                          ? "Toque para abrir"
+                          : e.unlock_at
+                            ? `Desbloqueia em ${new Date(e.unlock_at).toLocaleDateString("pt-BR")}`
+                            : "Ainda guardada"}
+                      </p>
                     </div>
                   </div>
                 ) : (
@@ -832,10 +876,13 @@ function Memories({
 }
 
 /* ------------------------- Final Surprise ------------------------- */
-function FinalSurprise({ finalMessage }: { finalMessage: string }) {
-  const [exploded, setExploded] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+function FinalSurprise({
+  finalMessage,
+  onCinematic,
+}: {
+  finalMessage: string;
+  onCinematic: () => void;
+}) {
   return (
     <SectionShell className="text-center">
       <SectionTitle eyebrow="Capítulo final" title="Para sempre" />
@@ -852,52 +899,12 @@ function FinalSurprise({ finalMessage }: { finalMessage: string }) {
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.96 }}
-          onClick={() => setExploded(true)}
+          onClick={onCinematic}
           className="group inline-flex items-center gap-3 rounded-full bg-accent px-8 py-4 text-base font-medium text-accent-foreground shadow-glow transition-all hover:bg-accent/90 cursor-pointer"
         >
-          Clique aqui <Heart className="h-5 w-5 fill-white" />
+          Uma última surpresa <Heart className="h-5 w-5 fill-white" />
         </motion.button>
-        <AnimatePresence>
-          {exploded && mounted && (
-            <div className="pointer-events-none absolute inset-0 z-10">
-              {HEART_BURST_PARTICLES.map((particle) => (
-                  <motion.div
-                    key={particle.id}
-                    initial={{ x: 0, y: 0, opacity: 1, scale: 0 }}
-                    animate={{
-                      x: particle.x,
-                      y: particle.y,
-                      opacity: 0,
-                      scale: 1.4,
-                      rotate: particle.rotate,
-                    }}
-                    transition={{ duration: 1.8, delay: particle.delay, ease: "easeOut" }}
-                    className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-                  >
-                    <Heart className="h-6 w-6 fill-accent text-accent drop-shadow-[0_0_8px_var(--romance)]" />
-                  </motion.div>
-              ))}
-            </div>
-          )}
-        </AnimatePresence>
       </div>
-      <AnimatePresence>
-        {exploded && (
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5, duration: 1.2 }}
-            className="mx-auto mt-16 max-w-2xl"
-          >
-            <p className="font-letter text-2xl italic leading-relaxed text-glow sm:text-3xl">
-              Eu te amo hoje.
-              <br />
-              Eu te amarei amanhã.
-              <br />E continuarei te amando em todos os dias que vierem depois.
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </SectionShell>
   );
 }
@@ -975,12 +982,16 @@ function SectionShell({
   id?: string;
 }) {
   return (
-    <section
+    <motion.section
       id={id}
+      initial={{ opacity: 0, y: 36, filter: "blur(8px)" }}
+      whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.75, ease: "easeOut" }}
       className={`relative mx-auto w-full max-w-5xl px-6 py-24 sm:py-32 ${className}`}
     >
       {children}
-    </section>
+    </motion.section>
   );
 }
 
@@ -1026,11 +1037,14 @@ export default function OurStory() {
   const { data: settings } = useSettings();
   const { data: places } = usePlaces();
   const { data: memoryEnvelopes } = useMemoryEnvelopes();
+  const { data: loveNotes } = useLoveNotes();
+  const music = useRomanceMusic(settings?.music_url);
   const { unlocks, unlock } = useUnlocks();
   const [modal, setModal] = useState<{ open: boolean; kind: "secret" | "video" }>({
     open: false,
     kind: "secret",
   });
+  const [cinematicEnding, setCinematicEnding] = useState(false);
 
   const startDate = settings?.relationship_start
     ? new Date(settings.relationship_start)
@@ -1098,6 +1112,8 @@ export default function OurStory() {
         title: e.title,
         message: e.message,
         is_easter_egg: e.is_easter_egg,
+        is_locked: e.is_locked,
+        unlock_at: e.unlock_at,
       }))
     : [
         { id: "hard-days", icon: "💌", icon_name: "Mail", title: "Para os dias difíceis", message: "Respira. Eu tô aqui. Sempre.", is_easter_egg: false },
@@ -1111,7 +1127,9 @@ export default function OurStory() {
     setModal({ open: true, kind: "secret" });
   });
 
-  const start = () => document.getElementById("story")?.scrollIntoView({ behavior: "smooth" });
+  const start = () => {
+    document.getElementById("story")?.scrollIntoView({ behavior: "smooth" });
+  };
   const hiddenUnlocked = unlocks["long-press"];
 
   const themeClass =
@@ -1137,6 +1155,7 @@ export default function OurStory() {
           hiddenUnlocked={hiddenUnlocked}
           hiddenVideoUrl={settings?.hidden_video_url ?? ""}
         />
+        <MessageWall notes={loveNotes ?? []} />
         <LoveLetter letter={letter} />
         <Memories
           envelopes={envelopeItems}
@@ -1145,8 +1164,26 @@ export default function OurStory() {
             setModal({ open: true, kind: "secret" });
           }}
         />
-        <FinalSurprise finalMessage={finalMessage} />
+        <FinalSurprise
+          finalMessage={finalMessage}
+          onCinematic={() => setCinematicEnding(true)}
+        />
       </div>
+      <RomanceMusicPlayer
+        playing={music.playing}
+        volume={music.volume}
+        setVolume={music.setVolume}
+        onToggle={music.toggle}
+        hasMusic={music.hasMusic}
+        loadError={music.loadError}
+      />
+      <CinematicEnding
+        active={cinematicEnding}
+        onRestart={() => {
+          setCinematicEnding(false);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+      />
       <footer className="px-6 py-10 text-center text-xs text-muted-foreground/60">
         <p>
           Feito com <Heart className="inline h-3 w-3 fill-accent text-accent" /> só para você.
