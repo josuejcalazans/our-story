@@ -21,7 +21,7 @@ function AuthPage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/heart-panel" });
+      if (data.session) navigate({ to: "/heart-panel", search: { tab: "timeline" } });
     });
   }, [navigate]);
 
@@ -41,7 +41,7 @@ function AuthPage() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate({ to: "/heart-panel" });
+        navigate({ to: "/heart-panel", search: { tab: "timeline" } });
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro");
