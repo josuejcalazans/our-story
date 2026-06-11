@@ -68,7 +68,9 @@
 
   /* Gradients & shadows */
   --gradient-romance: linear-gradient(135deg, oklch(0.13 0.06 295) 0%, oklch(0.17 0.07 295) 45%, oklch(0.22 0.09 300) 100%);
-  --gradient-glow: radial-gradient(circle at 50% 20%, oklch(0.66 0.25 305 / 0.35), transparent 60%);
+  --gradient-glow:
+    radial-gradient(circle at 50% 22%, oklch(0.66 0.25 305 / 0.34), transparent 58%),
+    radial-gradient(circle at 50% 48%, oklch(0.66 0.25 305 / 0.1), transparent 72%);
   --shadow-glow: 0 0 60px -10px oklch(0.66 0.25 305 / 0.55);
   --shadow-soft: 0 20px 60px -20px oklch(0 0 0 / 0.6);
 }

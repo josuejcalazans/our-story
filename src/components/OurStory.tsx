@@ -12,27 +12,37 @@ import {
 } from "@/lib/love-data";
 import { useTimeline, useStats, useSettings, useGallery } from "@/lib/use-site-content";
 
-/* ------------------------- Floating particles (client-only to avoid hydration mismatch) ------------------------- */
-function Particles({ count = 30 }: { count?: number }) {
+/* ------------------------- Floating particles (seeded — organic look, stable on reload) ------------------------- */
+function createSeededParticles(count: number) {
+  let seed = 0x9e3779b9;
+  const rand = () => {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    return (seed >>> 0) / 4294967296;
+  };
+
+  return Array.from({ length: count }, (_, id) => ({
+    id,
+    size: rand() * 6 + 2,
+    left: rand() * 100,
+    top: rand() * 100,
+    delay: rand() * 6,
+    duration: 6 + rand() * 8,
+  }));
+}
+
+const HERO_PARTICLES = createSeededParticles(30);
+
+function Particles() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const particles = useMemo(
-    () =>
-      Array.from({ length: count }).map(() => ({
-        size: Math.random() * 6 + 2,
-        left: Math.random() * 100,
-        top: Math.random() * 100,
-        delay: Math.random() * 6,
-        duration: 6 + Math.random() * 8,
-      })),
-    [count],
-  );
   if (!mounted) return null;
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {particles.map((p, i) => (
+      {HERO_PARTICLES.map((p) => (
         <span
-          key={i}
+          key={p.id}
           className="absolute rounded-full bg-secondary/40"
           style={{
             width: p.size,
@@ -131,7 +141,7 @@ function Hero({
         </motion.div>
         <h1 className="font-display text-5xl leading-tight tracking-tight text-glow sm:text-7xl md:text-8xl">
           Oi <span className="romantic-gradient-text italic">{herName}</span>{" "}
-          <span className="inline-block">❤</span>
+          <span className="inline-block drop-shadow-[0_0_18px_oklch(1_0_0/0.45)]">❤</span>
         </h1>
         <p className="mx-auto mt-6 max-w-md font-letter text-xl italic text-muted-foreground sm:text-2xl">
           Preparei algo especial para você.
