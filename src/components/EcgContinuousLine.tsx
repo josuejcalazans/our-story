@@ -12,10 +12,12 @@ export default function EcgContinuousLine({
   elapsedMs,
   beatKey,
   running = true,
+  totalMs = STORY_LOADER_MIN_MS,
 }: {
   elapsedMs: number;
   beatKey: number;
   running?: boolean;
+  totalMs?: number;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const segmentsRef = useRef<EcgSegments>({});
@@ -29,7 +31,7 @@ export default function EcgContinuousLine({
   useEffect(() => {
     if (!running || beatKey === lastBeatKeyRef.current) return;
     lastBeatKeyRef.current = beatKey;
-    const bpm = cycleMsToBpm(getHeartbeatCycleMs(elapsedRef.current));
+    const bpm = cycleMsToBpm(getHeartbeatCycleMs(elapsedRef.current, totalMs));
     queueEcgBeat(segmentsRef.current, headXRef.current, bpm);
   }, [beatKey, running]);
 
@@ -48,7 +50,7 @@ export default function EcgContinuousLine({
       const dt = Math.min((ts - prevTsRef.current) / 1000, 0.05);
       prevTsRef.current = ts;
 
-      const currentBpm = cycleMsToBpm(getHeartbeatCycleMs(elapsedRef.current));
+      const currentBpm = cycleMsToBpm(getHeartbeatCycleMs(elapsedRef.current, totalMs));
       headXRef.current += (55 + currentBpm * 0.75) * dt;
 
       const headFloor = Math.floor(headXRef.current);
@@ -66,11 +68,11 @@ export default function EcgContinuousLine({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [running]);
+  }, [running, totalMs]);
 
   return (
     <div
-      className="relative w-64 max-w-[78vw]"
+      className="relative mx-auto w-full max-w-xs"
       style={{ filter: "drop-shadow(0 0 6px rgba(244, 114, 182, 0.55))" }}
     >
       <canvas
@@ -87,8 +89,8 @@ export default function EcgContinuousLine({
             "repeating-linear-gradient(0deg, rgba(0,0,0,0.06) 0px, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 3px)",
         }}
       />
-      {elapsedMs > 80 && elapsedMs < STORY_LOADER_MIN_MS - 50 && (
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-9 bg-gradient-to-l from-background/80 to-transparent" />
+      {elapsedMs > 80 && elapsedMs < totalMs - 50 && (
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background/70 to-transparent" />
       )}
     </div>
   );
