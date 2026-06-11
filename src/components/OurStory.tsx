@@ -126,7 +126,7 @@ function Hero({
           animate={{ scale: pressing ? [1, 1.3, 1.3] : [1, 1.15, 1] }}
           transition={{
             duration: pressing ? 3 : 2,
-            repeat: pressing ? 0 : Infinity,
+            repeat: pressing ? 0 : Number.POSITIVE_INFINITY,
             ease: "easeInOut",
           }}
           className="mx-auto mb-6 inline-flex select-none touch-none cursor-pointer"
@@ -846,8 +846,8 @@ export default function OurStory() {
         title: e.title,
         description: e.description,
         place: e.place,
-        image_url: (e as any).image_url,
-        video_url: (e as any).video_url,
+        image_url: e.image_url ?? undefined,
+        video_url: e.video_url ?? undefined,
       }))
     : FALLBACK_TIMELINE.map((e, i) => ({
         id: String(i),
