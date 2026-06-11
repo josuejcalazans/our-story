@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,27 +18,84 @@ import {
   Eye,
   Palette,
   QrCode,
+  Download,
+  Copy,
+  Check,
+  History as HistoryIcon,
+  RotateCcw,
+  Scissors,
+  Crosshair,
+  Undo2,
+  Shapes,
+  Maximize,
+  Shield,
 } from "lucide-react";
 import { useAuth } from "@/lib/use-auth";
 import {
   useTimeline,
   useStats,
   useSettings,
+  useGallery,
   type TimelineEvent,
   type Stat,
   type SiteSettings,
+  type GalleryImage,
 } from "@/lib/use-site-content";
 import { useQueryClient } from "@tanstack/react-query";
 import OurStory from "@/components/OurStory";
 import { motion, AnimatePresence } from "framer-motion";
-import { QRCodeSVG } from "qrcode.react";
 import { z } from "zod";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import QRStylePicker from "@/components/QRStylePicker";
+import { useStyledQRCode } from "@/hooks/use-styled-qr";
+import {
+  CORNER_DOT_STYLES,
+  CORNER_SQUARE_STYLES,
+  DOT_STYLES,
+  REFERENCE_STYLE_PRESET,
+  type CornerDotType,
+  type CornerSquareType,
+  type DotType,
+} from "@/lib/qr-styles";
+
+const COLOR_PRESETS = [
+  { fg: "#eb5e8e", bg: "#ffffff", name: "Romance" },
+  { fg: "#000000", bg: "#ffffff", name: "Classic" },
+  { fg: "#4f46e5", bg: "#ffffff", name: "Indigo" },
+  { fg: "#059669", bg: "#ffffff", name: "Emerald" },
+  { fg: "#ffffff", bg: "#0d0717", name: "Dark" },
+];
+
+const HISTORY_KEY = "qr-generator-history";
+const MAX_HISTORY = 10;
+
+type ECLevel = "L" | "M" | "Q" | "H";
+const EC_LEVELS: { value: ECLevel; label: string; hint: string }[] = [
+  { value: "L", label: "L", hint: "~7%" },
+  { value: "M", label: "M", hint: "~15%" },
+  { value: "Q", label: "Q", hint: "~25%" },
+  { value: "H", label: "H", hint: "~30%" },
+];
+
+type HistoryItem = {
+  id: string;
+  text: string;
+  fgColor: string;
+  bgColor: string;
+  size: number;
+  level: ECLevel;
+  logoUrl: string;
+  logoSize: number;
+  dotStyle: DotType;
+  cornerSquareStyle: CornerSquareType;
+  cornerDotStyle: CornerDotType;
+  createdAt: number;
+};
 
 const adminSearchSchema = z.object({
-  tab: z
-    .enum(["timeline", "stats", "letter", "share"])
-    .optional()
-    .default("timeline"),
+  tab: z.enum(["timeline", "stats", "gallery", "letter", "share"]).optional().default("timeline"),
 });
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -145,12 +202,15 @@ function AdminPage() {
           }
           className="w-full"
         >
-          <TabsList className="grid w-full grid-cols-4 rounded-xl bg-white/5 p-1">
+          <TabsList className="grid w-full grid-cols-5 rounded-xl bg-white/5 p-1">
             <TabsTrigger value="timeline" className="rounded-lg">
               Timeline
             </TabsTrigger>
             <TabsTrigger value="stats" className="rounded-lg">
               Estatísticas
+            </TabsTrigger>
+            <TabsTrigger value="gallery" className="rounded-lg">
+              Galeria
             </TabsTrigger>
             <TabsTrigger value="letter" className="rounded-lg">
               Configurações
@@ -164,6 +224,9 @@ function AdminPage() {
           </TabsContent>
           <TabsContent value="stats" className="mt-6">
             <StatsEditor />
+          </TabsContent>
+          <TabsContent value="gallery" className="mt-6">
+            <GalleryEditor />
           </TabsContent>
           <TabsContent value="letter" className="mt-6">
             <SettingsEditor />
@@ -203,42 +266,311 @@ function AdminPage() {
   );
 }
 
+/* -------------------- Gallery -------------------- */
+function GalleryEditor() {
+  const { data, isLoading } = useGallery();
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ["gallery_images"] });
+
+  async function add() {
+    const nextOrder = (data?.length ?? 0) + 1;
+    const { error } = await supabase.from("gallery_images").insert({
+      image_url: "",
+      caption: "",
+      sort_order: nextOrder,
+    });
+    if (error) toast.error(error.message);
+    else refresh();
+  }
+
+  if (isLoading) return <Loader />;
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        {(data ?? []).map((img) => (
+          <GalleryRow key={img.id} img={img} onChange={refresh} />
+        ))}
+      </div>
+      <Button
+        onClick={add}
+        variant="outline"
+        className="w-full border-dashed py-10 rounded-2xl hover:bg-white/5"
+      >
+        <Plus className="h-4 w-4" /> Adicionar foto à galeria
+      </Button>
+    </div>
+  );
+}
+
+function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void }) {
+  const [form, setForm] = useState(img);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    const { error } = await supabase
+      .from("gallery_images")
+      .update({
+        image_url: form.image_url,
+        caption: form.caption,
+        sort_order: form.sort_order,
+      })
+      .eq("id", img.id);
+    if (error) toast.error(error.message);
+    else toast.success("Salvo");
+    setSaving(false);
+    onChange();
+  }
+
+  async function remove() {
+    if (!confirm("Remover essa foto?")) return;
+    const { error } = await supabase.from("gallery_images").delete().eq("id", img.id);
+    if (error) toast.error(error.message);
+    else onChange();
+  }
+
+  return (
+    <div className="glass space-y-4 rounded-2xl p-4">
+      <MediaUpload
+        type="image"
+        currentUrl={form.image_url}
+        onUpload={(url) => setForm({ ...form, image_url: url })}
+      />
+
+      <Input
+        placeholder="Legenda (opcional)"
+        value={form.caption || ""}
+        onChange={(e) => setForm({ ...form, caption: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+
+      <div className="flex items-center justify-between pt-2 border-t border-white/5">
+        <div className="flex gap-2">
+          <Button onClick={save} disabled={saving} size="sm" className="rounded-lg px-4">
+            {saving ? "..." : "Salvar"}
+          </Button>
+          <Button
+            onClick={remove}
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground hover:text-destructive rounded-lg"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase text-muted-foreground">Ordem:</span>
+          <input
+            type="number"
+            value={form.sort_order}
+            onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
+            className="w-10 bg-transparent text-center text-sm outline-none"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* -------------------- Share Panel -------------------- */
 function SharePanel() {
   const [url, setUrl] = useState("");
-  const [qrColor, setQrColor] = useState("#eb5e8e");
-  const [qrSize, setQrSize] = useState(256);
-  const [qrLogo, setQrLogo] = useState("");
+  const [fgColor, setFgColor] = useState("#eb5e8e");
+  const [bgColor, setBgColor] = useState("#ffffff");
+  const [size, setSize] = useState(256);
+  const [level, setLevel] = useState<ECLevel>("H");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [logoRenderUrl, setLogoRenderUrl] = useState("");
+  const [logoSize, setLogoSize] = useState(50);
+  const [logoExcavate, setLogoExcavate] = useState(true);
+  const [dotStyle, setDotStyle] = useState<DotType>(REFERENCE_STYLE_PRESET.dotStyle);
+  const [cornerSquareStyle, setCornerSquareStyle] = useState<CornerSquareType>(
+    REFERENCE_STYLE_PRESET.cornerSquareStyle,
+  );
+  const [cornerDotStyle, setCornerDotStyle] = useState<CornerDotType>(
+    REFERENCE_STYLE_PRESET.cornerDotStyle,
+  );
   const [includeMargin, setIncludeMargin] = useState(true);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const qrCanvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setUrl(window.location.origin);
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (raw) setHistory(JSON.parse(raw));
   }, []);
 
+  useEffect(() => {
+    if (!logoUrl) {
+      setLogoRenderUrl("");
+      return;
+    }
+
+    if (logoUrl.startsWith("data:")) {
+      setLogoRenderUrl(logoUrl);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const res = await fetch(logoUrl);
+        if (!res.ok) throw new Error("fetch failed");
+        const blob = await res.blob();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => resolve(ev.target?.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+        if (!cancelled) setLogoRenderUrl(dataUrl);
+      } catch {
+        if (!cancelled) setLogoRenderUrl(logoUrl);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [logoUrl]);
+
+  const styledQROptions = useMemo(
+    () => ({
+      data: url,
+      size,
+      fgColor,
+      bgColor,
+      level,
+      dotStyle,
+      cornerSquareStyle,
+      cornerDotStyle,
+      logoUrl: logoRenderUrl,
+      logoSize,
+      logoExcavate,
+    }),
+    [
+      url,
+      size,
+      fgColor,
+      bgColor,
+      level,
+      dotStyle,
+      cornerSquareStyle,
+      cornerDotStyle,
+      logoRenderUrl,
+      logoSize,
+      logoExcavate,
+    ],
+  );
+
+  useStyledQRCode(qrCanvasRef, styledQROptions);
+
+  const saveToHistory = useCallback(() => {
+    if (!url.trim()) return;
+    const item: HistoryItem = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: url,
+      fgColor,
+      bgColor,
+      size,
+      level,
+      logoUrl,
+      logoSize,
+      dotStyle,
+      cornerSquareStyle,
+      cornerDotStyle,
+      createdAt: Date.now(),
+    };
+    const filtered = history.filter(
+      (h) =>
+        !(
+          h.text === item.text &&
+          h.fgColor === item.fgColor &&
+          h.bgColor === item.bgColor &&
+          h.dotStyle === item.dotStyle &&
+          h.cornerSquareStyle === item.cornerSquareStyle &&
+          h.cornerDotStyle === item.cornerDotStyle &&
+          h.logoUrl === item.logoUrl
+        ),
+    );
+    const nextHistory = [item, ...filtered].slice(0, MAX_HISTORY);
+    setHistory(nextHistory);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(nextHistory));
+  }, [
+    url,
+    fgColor,
+    bgColor,
+    size,
+    level,
+    logoUrl,
+    logoSize,
+    dotStyle,
+    cornerSquareStyle,
+    cornerDotStyle,
+    history,
+  ]);
+
+  const downloadQR = useCallback(async () => {
+    const canvas = qrCanvasRef.current?.querySelector("canvas");
+    if (!canvas) return;
+
+    setIsExporting(true);
+    try {
+      const finalCanvas = document.createElement("canvas");
+      const ctx = finalCanvas.getContext("2d");
+      const margin = includeMargin ? 40 : 0;
+      finalCanvas.width = canvas.width + margin * 2;
+      finalCanvas.height = canvas.height + margin * 2;
+
+      if (ctx) {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+        ctx.drawImage(canvas, margin, margin);
+
+        const dataUrl = finalCanvas.toDataURL("image/png");
+        const link = document.createElement("a");
+        link.download = `qrcode-historia-${Date.now()}.png`;
+        link.href = dataUrl;
+        link.click();
+        saveToHistory();
+        toast.success("QR Code baixado!");
+      }
+    } catch (err) {
+      toast.error("Erro ao exportar");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [includeMargin, bgColor, saveToHistory]);
+
+  const restoreItem = (item: HistoryItem) => {
+    setFgColor(item.fgColor);
+    setBgColor(item.bgColor);
+    setSize(item.size);
+    setLevel(item.level);
+    setLogoUrl(item.logoUrl);
+    setLogoSize(item.logoSize);
+    setDotStyle(item.dotStyle);
+    setCornerSquareStyle(item.cornerSquareStyle);
+    setCornerDotStyle(item.cornerDotStyle);
+    toast.success("Configuração restaurada");
+  };
+
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr_350px]">
-      <div className="glass flex flex-col items-center justify-center gap-8 rounded-3xl p-8 text-center min-h-[500px]">
+    <div className="grid gap-8 lg:grid-cols-[1fr_380px]">
+      <div className="glass flex min-h-[500px] flex-col items-center justify-center gap-8 rounded-3xl p-8 text-center">
         <div className="relative group">
-          <div className="rounded-3xl bg-white p-6 shadow-glow transition-all duration-500 group-hover:scale-105">
-            <QRCodeSVG
-              id="qr-code-svg"
-              value={url}
-              size={qrSize}
-              fgColor={qrColor}
-              level="H"
-              includeMargin={includeMargin}
-              imageSettings={
-                qrLogo
-                  ? {
-                      src: qrLogo,
-                      x: undefined,
-                      y: undefined,
-                      height: qrSize * 0.2,
-                      width: qrSize * 0.2,
-                      excavate: true,
-                    }
-                  : undefined
-              }
+          <div
+            className="rounded-3xl p-6 shadow-glow transition-all duration-500 group-hover:scale-105"
+            style={{ backgroundColor: bgColor }}
+          >
+            <div
+              ref={qrCanvasRef}
+              className="flex items-center justify-center"
+              style={{ width: size, height: size }}
             />
           </div>
           <div className="absolute -inset-4 z-[-10] animate-spin-slow rounded-[40px] border-2 border-dashed border-accent/20" />
@@ -247,7 +579,7 @@ function SharePanel() {
         <div className="space-y-2">
           <h3 className="font-display text-3xl">Sua História está Pronta!</h3>
           <p className="max-w-xs text-sm text-muted-foreground">
-            Personalize o QR Code, baixe-o ou copie o link para compartilhar seu amor.
+            Personalize cada detalhe do seu QR Code para deixá-lo único.
           </p>
         </div>
 
@@ -257,107 +589,249 @@ function SharePanel() {
             size="sm"
             onClick={() => {
               navigator.clipboard.writeText(url);
+              setCopied(true);
               toast.success("Link copiado!");
+              setTimeout(() => setCopied(false), 2000);
             }}
             className="rounded-xl px-6"
           >
-            Copiar
+            {copied ? <Check className="h-4 w-4" /> : "Copiar"}
+          </Button>
+        </div>
+
+        <div className="flex w-full gap-3 max-w-sm">
+          <Button
+            onClick={downloadQR}
+            disabled={isExporting}
+            className="flex-1 h-12 rounded-xl gap-2 shadow-glow"
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Baixar PNG
           </Button>
         </div>
       </div>
 
-      <div className="glass flex h-fit flex-col gap-6 rounded-3xl p-6">
+      <div className="glass flex h-fit flex-col gap-6 rounded-3xl p-6 overflow-hidden">
         <h4 className="flex items-center gap-2 font-display text-lg">
-          <Palette className="h-5 w-5 text-accent" /> Personalizar
+          <Palette className="h-5 w-5 text-accent" /> Estilo & Design
         </h4>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Cor do QR Code
-            </label>
-            <div className="flex flex-wrap gap-2">
-              {["#eb5e8e", "#000000", "#4f46e5", "#059669", "#d97706"].map((color) => (
-                <button
-                  key={color}
-                  onClick={() => setQrColor(color)}
-                  className={`h-8 w-8 rounded-full border-2 transition-transform hover:scale-110 ${
-                    qrColor === color ? "scale-110 border-white shadow-glow" : "border-transparent"
-                  }`}
-                  style={{ backgroundColor: color }}
+        <Tabs defaultValue="style" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 h-10 bg-white/5 p-1 rounded-xl">
+            <TabsTrigger value="style" className="text-xs rounded-lg">
+              Design
+            </TabsTrigger>
+            <TabsTrigger value="logo" className="text-xs rounded-lg">
+              Logo
+            </TabsTrigger>
+            <TabsTrigger value="history" className="text-xs rounded-lg">
+              Histórico
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="style" className="mt-4 space-y-6">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="secondary" className="w-full h-11 gap-2 text-xs rounded-xl">
+                      <Palette className="w-4 h-4" /> Cores
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-4 space-y-4 glass border-white/10">
+                    <div className="space-y-3">
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Presets
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {COLOR_PRESETS.map((p) => (
+                          <button
+                            key={p.name}
+                            onClick={() => {
+                              setFgColor(p.fg);
+                              setBgColor(p.bg);
+                            }}
+                            className="h-8 w-8 rounded-full border-2 border-white/10 transition-transform hover:scale-110"
+                            style={{ backgroundColor: p.fg }}
+                            title={p.name}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-muted-foreground">Pixel</label>
+                        <input
+                          type="color"
+                          value={fgColor}
+                          onChange={(e) => setFgColor(e.target.value)}
+                          className="w-full h-8 cursor-pointer rounded-lg bg-transparent border-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-muted-foreground">Fundo</label>
+                        <input
+                          type="color"
+                          value={bgColor}
+                          onChange={(e) => setBgColor(e.target.value)}
+                          className="w-full h-8 cursor-pointer rounded-lg bg-transparent border-none"
+                        />
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="secondary" className="w-full h-11 gap-2 text-xs rounded-xl">
+                      <Maximize className="w-4 h-4" /> Tamanho
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-4 glass border-white/10">
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      QR Size: {size}px
+                    </label>
+                    <Slider
+                      value={[size]}
+                      onValueChange={([v]) => setSize(v)}
+                      min={128}
+                      max={512}
+                      step={32}
+                      className="mt-4 accent-accent"
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-4 rounded-2xl bg-white/5 p-4 border border-white/5">
+                <QRStylePicker
+                  title="Pixel"
+                  category="dot"
+                  options={DOT_STYLES}
+                  value={dotStyle}
+                  onChange={setDotStyle}
                 />
-              ))}
-              <input
-                type="color"
-                value={qrColor}
-                onChange={(e) => setQrColor(e.target.value)}
-                className="h-8 w-8 cursor-pointer overflow-hidden rounded-full border-none bg-transparent"
-              />
+                <QRStylePicker
+                  title="Canto Externo"
+                  category="cornerSquare"
+                  options={CORNER_SQUARE_STYLES}
+                  value={cornerSquareStyle}
+                  onChange={setCornerSquareStyle}
+                />
+                <QRStylePicker
+                  title="Canto Interno"
+                  category="cornerDot"
+                  options={CORNER_DOT_STYLES}
+                  value={cornerDotStyle}
+                  onChange={setCornerDotStyle}
+                />
+              </div>
             </div>
-          </div>
+          </TabsContent>
 
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Tamanho ({qrSize}px)
-            </label>
-            <input
-              type="range"
-              min="128"
-              max="512"
-              step="32"
-              value={qrSize}
-              onChange={(e) => setQrSize(Number(e.target.value))}
-              className="w-full accent-accent"
-            />
-          </div>
+          <TabsContent value="logo" className="mt-4 space-y-4">
+            <div className="space-y-4">
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Logo Central
+              </label>
+              <MediaUpload type="image" currentUrl={logoUrl} onUpload={setLogoUrl} />
 
-          <div className="space-y-2">
-            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Foto no Centro
-            </label>
-            <MediaUpload type="image" currentUrl={qrLogo} onUpload={setQrLogo} />
-          </div>
+              {logoUrl && (
+                <div className="space-y-4 pt-4 border-t border-white/5">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>TAMANHO DA LOGO</span>
+                      <span>{logoSize}px</span>
+                    </div>
+                    <Slider
+                      value={[logoSize]}
+                      onValueChange={([v]) => setLogoSize(v)}
+                      min={20}
+                      max={Math.round(size * 0.4)}
+                      step={2}
+                      className="accent-accent"
+                    />
+                  </div>
 
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="checkbox"
-              id="margin"
-              checked={includeMargin}
-              onChange={(e) => setIncludeMargin(e.target.checked)}
-              className="accent-accent"
-            />
-            <label htmlFor="margin" className="cursor-pointer text-xs text-muted-foreground">
-              Incluir margem branca
-            </label>
-          </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Recortar fundo</span>
+                    <Switch checked={logoExcavate} onCheckedChange={setLogoExcavate} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-4">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Recentes ({history.length})
+                </label>
+                {history.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setHistory([]);
+                      localStorage.removeItem(HISTORY_KEY);
+                    }}
+                    className="h-7 text-[10px] text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" /> Limpar
+                  </Button>
+                )}
+              </div>
+
+              <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                {history.length === 0 ? (
+                  <p className="text-center py-8 text-xs text-muted-foreground italic">
+                    Nenhum histórico ainda.
+                  </p>
+                ) : (
+                  history.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-3 p-2 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group"
+                    >
+                      <div
+                        className="h-10 w-10 rounded-lg shrink-0 flex items-center justify-center border border-white/10"
+                        style={{ backgroundColor: item.bgColor }}
+                      >
+                        <QrCode className="h-5 w-5" style={{ color: item.fgColor }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {new Date(item.createdAt).toLocaleString()}
+                        </p>
+                        <p className="text-[9px] font-mono opacity-50 truncate">
+                          {item.dotStyle} · {item.level}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => restoreItem(item)}
+                        className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-all text-accent"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        <div className="flex items-center gap-2 pt-4 border-t border-white/5">
+          <Switch id="margin-mode" checked={includeMargin} onCheckedChange={setIncludeMargin} />
+          <label htmlFor="margin-mode" className="text-xs text-muted-foreground cursor-pointer">
+            Incluir margem branca no download
+          </label>
         </div>
-
-        <Button
-          variant="secondary"
-          className="mt-4 w-full rounded-xl"
-          onClick={() => {
-            const svg = document.getElementById("qr-code-svg");
-            if (svg) {
-              const svgData = new XMLSerializer().serializeToString(svg);
-              const canvas = document.createElement("canvas");
-              const ctx = canvas.getContext("2d");
-              const img = new Image();
-              img.onload = () => {
-                canvas.width = qrSize;
-                canvas.height = qrSize;
-                ctx?.drawImage(img, 0, 0);
-                const pngFile = canvas.toDataURL("image/png");
-                const downloadLink = document.createElement("a");
-                downloadLink.download = "qrcode-nossa-historia.png";
-                downloadLink.href = pngFile;
-                downloadLink.click();
-              };
-              img.src = "data:image/svg+xml;base64," + btoa(svgData);
-            }
-          }}
-        >
-          <Upload className="h-4 w-4 rotate-180" /> Baixar PNG
-        </Button>
       </div>
     </div>
   );
@@ -549,8 +1023,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
         </div>
       </div>
 
-
-        <div className="space-y-1">
+      <div className="space-y-1">
         <label className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
           Descrição
         </label>

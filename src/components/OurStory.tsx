@@ -10,7 +10,7 @@ import {
   LOVE_LETTER as FALLBACK_LETTER,
   FINAL_MESSAGE as FALLBACK_FINAL,
 } from "@/lib/love-data";
-import { useTimeline, useStats, useSettings } from "@/lib/use-site-content";
+import { useTimeline, useStats, useSettings, useGallery } from "@/lib/use-site-content";
 
 /* ------------------------- Floating particles (client-only to avoid hydration mismatch) ------------------------- */
 function Particles({ count = 30 }: { count?: number }) {
@@ -78,7 +78,11 @@ function useUnlocks() {
 }
 
 /* ------------------------- Hero with long-press easter egg ------------------------- */
-function Hero({ onStart, onLongPress, herName }: {
+function Hero({
+  onStart,
+  onLongPress,
+  herName,
+}: {
   onStart: () => void;
   onLongPress: () => void;
   herName: string;
@@ -110,7 +114,11 @@ function Hero({ onStart, onLongPress, herName }: {
       >
         <motion.div
           animate={{ scale: pressing ? [1, 1.3, 1.3] : [1, 1.15, 1] }}
-          transition={{ duration: pressing ? 3 : 2, repeat: pressing ? 0 : Infinity, ease: "easeInOut" }}
+          transition={{
+            duration: pressing ? 3 : 2,
+            repeat: pressing ? 0 : Infinity,
+            ease: "easeInOut",
+          }}
           className="mx-auto mb-6 inline-flex select-none touch-none cursor-pointer"
           onMouseDown={handlePressStart}
           onMouseUp={cancel}
@@ -194,7 +202,13 @@ function TimeTogether({ startDate }: { startDate: Date }) {
 }
 
 /* ------------------------- Stats ------------------------- */
-function StatsSection({ stats, days }: { stats: { id?: string; icon: string; label: string; value: string }[]; days: number }) {
+function StatsSection({
+  stats,
+  days,
+}: {
+  stats: { id?: string; icon: string; label: string; value: string }[];
+  days: number;
+}) {
   return (
     <SectionShell>
       <SectionTitle eyebrow="Capítulo 02" title="Nossa história em números" />
@@ -227,7 +241,19 @@ function StatsSection({ stats, days }: { stats: { id?: string; icon: string; lab
 }
 
 /* ------------------------- Timeline ------------------------- */
-function Timeline({ items }: { items: { id?: string; date: string; title: string; description: string; place: string | null; image_url?: string; video_url?: string }[] }) {
+function Timeline({
+  items,
+}: {
+  items: {
+    id?: string;
+    date: string;
+    title: string;
+    description: string;
+    place: string | null;
+    image_url?: string;
+    video_url?: string;
+  }[];
+}) {
   const [open, setOpen] = useState<number | null>(null);
   return (
     <SectionShell>
@@ -260,11 +286,17 @@ function Timeline({ items }: { items: { id?: string; date: string; title: string
                 >
                   {item.image_url && (
                     <div className="h-48 w-full overflow-hidden">
-                      <img src={item.image_url} alt={item.title} className="h-full w-full object-cover transition-transform duration-500 hover:scale-110" />
+                      <img
+                        src={item.image_url}
+                        alt={item.title}
+                        className="h-full w-full object-cover transition-transform duration-500 hover:scale-110"
+                      />
                     </div>
                   )}
                   <div className="p-6">
-                    <div className="text-xs uppercase tracking-[0.2em] text-secondary">{item.date}</div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-secondary">
+                      {item.date}
+                    </div>
                     <h3 className="mt-2 font-display text-2xl">{item.title}</h3>
                     <AnimatePresence initial={false}>
                       {isOpen && (
@@ -279,8 +311,19 @@ function Timeline({ items }: { items: { id?: string; date: string; title: string
                             {item.description}
                           </p>
                           {item.video_url && (
-                            <div className="mt-4 overflow-hidden rounded-xl border border-white/10 shadow-lg">
+                            <div className="mt-4 overflow-hidden rounded-xl border border-white/10 shadow-lg aspect-video">
+                              {item.video_url.includes("youtube.com") ||
+                              item.video_url.includes("youtu.be") ||
+                              item.video_url.includes("vimeo.com") ? (
+                                <iframe
+                                  src={getEmbedUrl(item.video_url)}
+                                  className="h-full w-full"
+                                  allow="autoplay; encrypted-media"
+                                  allowFullScreen
+                                />
+                              ) : (
                                 <video src={item.video_url} controls className="w-full" />
+                              )}
                             </div>
                           )}
                           {item.place && (
@@ -330,52 +373,79 @@ function Places() {
   );
 }
 
+/* ------------------------- Helpers ------------------------- */
+function getEmbedUrl(url: string) {
+  if (!url) return "";
+
+  // YouTube
+  const ytMatch = url.match(
+    /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/,
+  );
+  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1`;
+
+  // Vimeo
+  const vMatch = url.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/);
+  if (vMatch) return `https://player.vimeo.com/video/${vMatch[1]}?autoplay=1`;
+
+  return url;
+}
+
 /* ------------------------- Gallery ------------------------- */
 function Gallery() {
+  const { data: images, isLoading } = useGallery();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const tiles = useMemo(
-    () =>
-      Array.from({ length: 9 }).map((_, i) => ({
-        h: [180, 240, 300, 220, 280, 200, 260, 240, 300][i],
-        hue: 270 + i * 8,
-      })),
-    [],
-  );
+
+  if (isLoading || !mounted) return null;
+
   return (
     <SectionShell>
       <SectionTitle eyebrow="Capítulo 05" title="Galeria de momentos" />
-      {mounted && (
-        <div className="mt-10 columns-2 gap-4 sm:columns-3">
-          {tiles.map((t, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-40px" }}
-              transition={{ delay: i * 0.05 }}
-              className="mb-4 break-inside-avoid overflow-hidden rounded-2xl shadow-soft"
-              style={{ height: t.h }}
-            >
-              <div
-                className="flex h-full w-full items-center justify-center text-3xl text-white/30"
-                style={{
-                  background: `linear-gradient(135deg, hsl(${t.hue} 60% 35% / 0.7), hsl(${t.hue + 30} 70% 45% / 0.8))`,
-                }}
-              >
-                <Heart className="h-10 w-10" />
-              </div>
-            </motion.div>
-          ))}
-        </div>
+      <div className="mt-10 columns-2 gap-4 sm:columns-3">
+        {(images ?? []).map((img, i) => (
+          <motion.div
+            key={img.id}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ delay: i * 0.05 }}
+            className="group mb-4 break-inside-avoid overflow-hidden rounded-2xl shadow-soft"
+          >
+            <div className="relative overflow-hidden">
+              <img
+                src={img.image_url}
+                alt={img.caption || ""}
+                className="w-full object-cover transition-transform duration-500 group-hover:scale-110"
+              />
+              {img.caption && (
+                <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/60 to-transparent p-4 opacity-0 transition-opacity group-hover:opacity-100">
+                  <p className="text-xs text-white italic">{img.caption}</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+      {(images ?? []).length === 0 && (
+        <p className="text-center text-sm text-muted-foreground italic mt-10">
+          Nenhuma foto adicionada ainda.
+        </p>
       )}
     </SectionShell>
   );
 }
 
 /* ------------------------- Video Message ------------------------- */
-function VideoMessage({ hiddenUnlocked, hiddenVideoUrl }: { hiddenUnlocked: boolean; hiddenVideoUrl: string }) {
+function VideoMessage({
+  hiddenUnlocked,
+  hiddenVideoUrl,
+}: {
+  hiddenUnlocked: boolean;
+  hiddenVideoUrl: string;
+}) {
   const [playing, setPlaying] = useState(false);
+  const embedUrl = useMemo(() => getEmbedUrl(hiddenVideoUrl), [hiddenVideoUrl]);
+
   return (
     <SectionShell id="video-section">
       <SectionTitle eyebrow="Capítulo 06" title="Uma mensagem pra você" />
@@ -402,15 +472,22 @@ function VideoMessage({ hiddenUnlocked, hiddenVideoUrl }: { hiddenUnlocked: bool
               </motion.span>
             </button>
           ) : hiddenUnlocked && hiddenVideoUrl ? (
-            hiddenVideoUrl.includes("youtube.com") || hiddenVideoUrl.includes("vimeo.com") ? (
-                <iframe
-                    src={hiddenVideoUrl}
-                    className="absolute inset-0 h-full w-full"
-                    allow="autoplay; encrypted-media"
-                    allowFullScreen
-                />
+            hiddenVideoUrl.includes("youtube.com") ||
+            hiddenVideoUrl.includes("youtu.be") ||
+            hiddenVideoUrl.includes("vimeo.com") ? (
+              <iframe
+                src={embedUrl}
+                className="absolute inset-0 h-full w-full"
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+              />
             ) : (
-                <video src={hiddenVideoUrl} controls autoPlay className="absolute inset-0 h-full w-full" />
+              <video
+                src={hiddenVideoUrl}
+                controls
+                autoPlay
+                className="absolute inset-0 h-full w-full"
+              />
             )
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
@@ -534,7 +611,9 @@ function Memories({ onHeartTaps }: { onHeartTaps: () => void }) {
           aria-label="Coração escondido"
           className="rounded-full p-3 opacity-40 transition-all hover:opacity-100 cursor-pointer"
         >
-          <Heart className={`h-6 w-6 ${taps > 0 ? "fill-accent text-accent" : "text-muted-foreground"}`} />
+          <Heart
+            className={`h-6 w-6 ${taps > 0 ? "fill-accent text-accent" : "text-muted-foreground"}`}
+          />
         </button>
       </div>
     </SectionShell>
@@ -603,8 +682,7 @@ function FinalSurprise({ finalMessage }: { finalMessage: string }) {
               Eu te amo hoje.
               <br />
               Eu te amarei amanhã.
-              <br />
-              E continuarei te amando em todos os dias que vierem depois.
+              <br />E continuarei te amando em todos os dias que vierem depois.
             </p>
           </motion.div>
         )}
@@ -614,7 +692,13 @@ function FinalSurprise({ finalMessage }: { finalMessage: string }) {
 }
 
 /* ------------------------- Secret modal ------------------------- */
-function SecretModal({ open, onClose, message, kind, onAction }: {
+function SecretModal({
+  open,
+  onClose,
+  message,
+  kind,
+  onAction,
+}: {
   open: boolean;
   onClose: () => void;
   message: string;
@@ -668,9 +752,20 @@ function SecretModal({ open, onClose, message, kind, onAction }: {
 }
 
 /* ------------------------- Shared shells ------------------------- */
-function SectionShell({ children, className = "", id }: { children: React.ReactNode; className?: string; id?: string }) {
+function SectionShell({
+  children,
+  className = "",
+  id,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  id?: string;
+}) {
   return (
-    <section id={id} className={`relative mx-auto w-full max-w-5xl px-6 py-24 sm:py-32 ${className}`}>
+    <section
+      id={id}
+      className={`relative mx-auto w-full max-w-5xl px-6 py-24 sm:py-32 ${className}`}
+    >
       {children}
     </section>
   );
@@ -764,7 +859,8 @@ export default function OurStory() {
   const start = () => document.getElementById("story")?.scrollIntoView({ behavior: "smooth" });
   const hiddenUnlocked = unlocks["long-press"];
 
-  const themeClass = settings?.theme_mode === "soft-rose" ? "theme-soft-rose min-h-screen" : "min-h-screen";
+  const themeClass =
+    settings?.theme_mode === "soft-rose" ? "theme-soft-rose min-h-screen" : "min-h-screen";
 
   return (
     <main className={`relative ${themeClass}`}>
@@ -782,7 +878,10 @@ export default function OurStory() {
         <Timeline items={timelineItems} />
         <Places />
         <Gallery />
-        <VideoMessage hiddenUnlocked={hiddenUnlocked} hiddenVideoUrl={settings?.hidden_video_url ?? ""} />
+        <VideoMessage
+          hiddenUnlocked={hiddenUnlocked}
+          hiddenVideoUrl={settings?.hidden_video_url ?? ""}
+        />
         <LoveLetter letter={letter} />
         <Memories
           onHeartTaps={() => {
@@ -801,9 +900,7 @@ export default function OurStory() {
         onAction={() => {
           document.getElementById("video-section")?.scrollIntoView({ behavior: "smooth" });
         }}
-        message={modal.kind === "video"
-          ? "Você desbloqueou o vídeo escondido."
-          : secretMessage}
+        message={modal.kind === "video" ? "Você desbloqueou o vídeo escondido." : secretMessage}
         kind={modal.kind}
       />
     </main>
