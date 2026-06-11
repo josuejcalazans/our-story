@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { forwardRef, useEffect, useMemo, useState } from "react";
 import { CalendarHeart, Clock3 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -10,6 +10,7 @@ import {
   formatStoryDateShort,
   isoFromDateAndTime,
   parseStoryDate,
+  toCalendarDate,
   toDateOnlyString,
 } from "@/lib/story-date";
 import { ptBR } from "date-fns/locale";
@@ -90,17 +91,17 @@ export function StoryDateDisplay({
 
 /* ------------------------- Pickers ------------------------- */
 
-function StoryDateTrigger({
-  children,
-  className,
-  emptyLabel,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  emptyLabel?: string;
-}) {
+const StoryDateTrigger = forwardRef<
+  HTMLButtonElement,
+  {
+    children?: React.ReactNode;
+    className?: string;
+    emptyLabel?: string;
+  }
+>(function StoryDateTrigger({ children, className, emptyLabel }, ref) {
   return (
     <button
+      ref={ref}
       type="button"
       className={cn(
         "flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left transition-all hover:border-primary/30 hover:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer",
@@ -110,10 +111,12 @@ function StoryDateTrigger({
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/20">
         <CalendarHeart className="h-4 w-4" aria-hidden />
       </div>
-      <div className="min-w-0 flex-1">{children ?? <span className="text-sm text-muted-foreground">{emptyLabel}</span>}</div>
+      <div className="min-w-0 flex-1">
+        {children ?? <span className="text-sm text-muted-foreground">{emptyLabel}</span>}
+      </div>
     </button>
   );
-}
+});
 
 export function StoryDatePicker({
   value,
@@ -130,6 +133,7 @@ export function StoryDatePicker({
 }) {
   const [open, setOpen] = useState(false);
   const parsed = useMemo(() => parseStoryDate(value ?? ""), [value]);
+  const calendarSelected = parsed ? toCalendarDate(parsed) : undefined;
   const [hours, setHours] = useState(parsed ? parsed.getHours() : 20);
   const [minutes, setMinutes] = useState(parsed ? parsed.getMinutes() : 0);
 
@@ -140,28 +144,24 @@ export function StoryDatePicker({
     setMinutes(d.getMinutes());
   }, [value]);
 
-  const selected = parsed ?? undefined;
   const label = parsed
     ? mode === "datetime"
       ? `${formatStoryDateLong(parsed)} · ${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`
       : formatStoryDateLong(parsed)
     : null;
 
-  function pickDate(date: Date | undefined) {
-    if (!date) {
-      onChange(null);
-      return;
-    }
+  function pickDate(date: Date) {
+    const day = toCalendarDate(date);
     if (mode === "datetime") {
-      onChange(isoFromDateAndTime(date, hours, minutes));
+      onChange(isoFromDateAndTime(day, hours, minutes));
     } else {
-      onChange(toDateOnlyString(date));
+      onChange(toDateOnlyString(day));
     }
   }
 
   function applyTime(h: number, m: number) {
-    if (!parsed) return;
-    onChange(isoFromDateAndTime(parsed, h, m));
+    const base = calendarSelected ?? new Date();
+    onChange(isoFromDateAndTime(base, h, m));
   }
 
   return (
@@ -180,12 +180,14 @@ export function StoryDatePicker({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-auto rounded-2xl border-white/10 bg-card/95 p-0 shadow-glow backdrop-blur-xl"
+        className="z-[200] w-auto rounded-2xl border-white/10 bg-card p-0 shadow-glow backdrop-blur-xl"
       >
         <Calendar
           mode="single"
-          selected={selected}
+          selected={calendarSelected}
+          defaultMonth={calendarSelected}
           onSelect={(date) => {
+            if (!date) return;
             pickDate(date);
             if (mode === "date") setOpen(false);
           }}
@@ -248,30 +250,36 @@ export function StoryDateTextPicker({
 }) {
   const [open, setOpen] = useState(false);
   const parsed = useMemo(() => parseStoryDate(value), [value]);
+  const calendarSelected = parsed ? toCalendarDate(parsed) : undefined;
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-3", className)}>
+      {value && parsed && (
+        <StoryDateDisplay value={value} size="sm" />
+      )}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <StoryDateTrigger emptyLabel="Escolher data do momento">
-            {value ? (
-              parsed ? (
-                <StoryDateDisplay value={value} size="sm" />
-              ) : (
-                <p className="truncate text-sm font-medium">{value}</p>
-              )
-            ) : null}
+          <StoryDateTrigger emptyLabel="Escolher data no calendário">
+            {value && !parsed ? (
+              <p className="truncate text-sm font-medium">{value}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {value ? "Alterar pelo calendário" : "Abrir calendário"}
+              </p>
+            )}
           </StoryDateTrigger>
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="w-auto rounded-2xl border-white/10 bg-card/95 p-0 shadow-glow backdrop-blur-xl"
+          className="z-[200] w-auto rounded-2xl border-white/10 bg-card p-0 shadow-glow backdrop-blur-xl"
         >
           <Calendar
             mode="single"
-            selected={parsed ?? undefined}
+            selected={calendarSelected}
+            defaultMonth={calendarSelected}
             onSelect={(date) => {
-              if (date) onChange(formatStoryDateShort(date));
+              if (!date) return;
+              onChange(formatStoryDateShort(toCalendarDate(date)));
               setOpen(false);
             }}
             locale={ptBR}
@@ -280,7 +288,7 @@ export function StoryDateTextPicker({
         </PopoverContent>
       </Popover>
       <Input
-        placeholder="Ou digite: 12 Jun 2023"
+        placeholder="Ou digite: 12 jun 2023"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="rounded-xl border-white/5 bg-white/5 text-sm"

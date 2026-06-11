@@ -15,6 +15,12 @@ export function parseStoryDate(value: string | null | undefined): Date | null {
   if (!value?.trim()) return null;
   const trimmed = value.trim();
 
+  // yyyy-MM-dd sem hora — evita deslocamento UTC no calendário
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+
   if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
     const iso = new Date(trimmed);
     if (!Number.isNaN(iso.getTime())) return iso;
@@ -27,6 +33,11 @@ export function parseStoryDate(value: string | null | undefined): Date | null {
 
   const fallback = new Date(trimmed);
   return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+/** Data só com dia/mês/ano no fuso local — para o calendário marcar o dia certo. */
+export function toCalendarDate(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 export function formatStoryDateLong(date: Date): string {
