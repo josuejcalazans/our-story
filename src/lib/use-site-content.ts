@@ -37,6 +37,7 @@ export type SiteSettings = {
   secret_message: string;
   hidden_video_url: string;
   music_url: string;
+  ending_audio_url: string;
   theme_mode: ThemeMode;
   page_gate_enabled: boolean;
   access_date: string | null;
@@ -123,6 +124,7 @@ export function useSettings() {
       return {
         ...data,
         music_url: data.music_url ?? "",
+        ending_audio_url: data.ending_audio_url ?? "",
         theme_mode: toThemeMode(data.theme_mode),
         page_gate_enabled: Boolean(data.page_gate_enabled),
         access_date: data.access_date ?? null,
