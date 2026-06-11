@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Heart } from "lucide-react";
+import {
+  playEndingSurpriseAudio,
+  stopEndingSurpriseAudio,
+} from "@/lib/ending-audio-session";
 
 const LINES = [
   "Para todos os capítulos que já vivemos...",
@@ -36,18 +40,31 @@ function RisingParticles() {
 
 export default function CinematicEnding({
   active,
+  audioUrl,
   onRestart,
 }: {
   active: boolean;
+  audioUrl?: string | null;
   onRestart: () => void;
 }) {
   const [line, setLine] = useState(0);
 
   useEffect(() => {
     if (!active) {
+      stopEndingSurpriseAudio();
       setLine(0);
       return;
     }
+
+    if (audioUrl?.trim()) {
+      void playEndingSurpriseAudio(audioUrl);
+    }
+
+    return () => stopEndingSurpriseAudio();
+  }, [active, audioUrl]);
+
+  useEffect(() => {
+    if (!active) return;
     if (line >= LINES.length - 1) return;
     const t = setTimeout(() => setLine((l) => l + 1), 2800);
     return () => clearTimeout(t);
@@ -93,7 +110,10 @@ export default function CinematicEnding({
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 1.2 }}
-                onClick={onRestart}
+                onClick={() => {
+                  stopEndingSurpriseAudio();
+                  onRestart();
+                }}
                 className="mt-12 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-8 py-4 text-sm font-medium text-accent shadow-glow transition-all hover:bg-accent/25 cursor-pointer"
               >
                 <Heart className="h-4 w-4 fill-current" />

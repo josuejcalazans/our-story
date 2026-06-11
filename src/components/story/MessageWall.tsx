@@ -9,11 +9,17 @@ const FALLBACK_NOTES = [
   "Como transforma dias comuns em momentos especiais.",
 ];
 
-export default function MessageWall({ notes }: { notes: { id: string; text: string }[] }) {
+export default function MessageWall({
+  notes,
+  id = "chapter-notes",
+}: {
+  notes: { id: string; text: string }[];
+  id?: string;
+}) {
   const items = notes.length ? notes : FALLBACK_NOTES.map((text, i) => ({ id: String(i), text }));
 
   return (
-    <section className="relative px-6 py-24">
+    <section id={id} className="relative px-6 py-24 scroll-mt-20">
       <div className="mx-auto max-w-5xl">
         <p className="text-center text-[11px] uppercase tracking-[0.35em] text-muted-foreground">
           Capítulo especial
