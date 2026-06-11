@@ -42,12 +42,14 @@ import {
   useGallery,
   usePlaces,
   useMemoryEnvelopes,
+  useLoveNotes,
   type TimelineEvent,
   type Stat,
   type SiteSettings,
   type GalleryImage,
   type Place,
   type MemoryEnvelope,
+  type LoveNote,
 } from "@/lib/use-site-content";
 import IconPicker from "@/components/IconPicker";
 import { GatePasswordPreview, StoryDatePicker, StoryDateTextPicker } from "@/components/StoryDate";
@@ -115,7 +117,7 @@ type HistoryItem = {
   createdAt: number;
 };
 
-const ADMIN_TABS = ["timeline", "stats", "places", "gallery", "memories", "letter", "share"] as const;
+const ADMIN_TABS = ["timeline", "stats", "places", "gallery", "memories", "notes", "letter", "share"] as const;
 
 const adminSearchSchema = z.object({
   tab: z.enum(ADMIN_TABS).optional().default("timeline"),
@@ -244,6 +246,9 @@ function AdminPage() {
             <TabsTrigger value="memories" className="rounded-lg text-xs sm:text-sm">
               Memórias
             </TabsTrigger>
+            <TabsTrigger value="notes" className="rounded-lg text-xs sm:text-sm">
+              Mensagens
+            </TabsTrigger>
             <TabsTrigger value="letter" className="rounded-lg text-xs sm:text-sm">
               Configurações
             </TabsTrigger>
@@ -265,6 +270,9 @@ function AdminPage() {
           </TabsContent>
           <TabsContent value="memories" className="mt-6">
             <MemoriesEditor />
+          </TabsContent>
+          <TabsContent value="notes" className="mt-6">
+            <LoveNotesEditor />
           </TabsContent>
           <TabsContent value="letter" className="mt-6">
             <SettingsEditor />
@@ -351,6 +359,10 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
       .update({
         image_url: form.image_url,
         caption: form.caption,
+        title: form.title,
+        description: form.description,
+        location: form.location,
+        taken_at: form.taken_at || null,
         sort_order: form.sort_order,
       })
       .eq("id", img.id);
@@ -376,11 +388,38 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
       />
 
       <Input
-        placeholder="Legenda (opcional)"
+        placeholder="Título"
+        value={form.title || ""}
+        onChange={(e) => setForm({ ...form, title: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <Input
+        placeholder="Legenda curta (opcional)"
         value={form.caption || ""}
         onChange={(e) => setForm({ ...form, caption: e.target.value })}
         className="bg-white/5 rounded-xl border-white/5"
       />
+      <Textarea
+        rows={2}
+        placeholder="Descrição (opcional)"
+        value={form.description || ""}
+        onChange={(e) => setForm({ ...form, description: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input
+          placeholder="Local"
+          value={form.location || ""}
+          onChange={(e) => setForm({ ...form, location: e.target.value })}
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+        <Input
+          type="date"
+          value={form.taken_at || ""}
+          onChange={(e) => setForm({ ...form, taken_at: e.target.value })}
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+      </div>
 
       <div className="flex items-center justify-between pt-2 border-t border-white/5">
         <div className="flex gap-2">
@@ -1076,7 +1115,7 @@ function MediaUpload({
 }: {
   onUpload: (url: string) => void;
   currentUrl?: string | null;
-  type?: "image" | "video";
+  type?: "image" | "video" | "audio";
 }) {
   const [uploading, setUploading] = useState(false);
 
@@ -1117,7 +1156,7 @@ function MediaUpload({
             />
           ) : (
             <div className="flex h-20 w-32 items-center justify-center rounded-lg bg-white/10 text-xs border border-white/5">
-              Vídeo
+              {type === "audio" ? "Áudio" : "Vídeo"}
             </div>
           )}
           <button
@@ -1136,10 +1175,14 @@ function MediaUpload({
           ) : (
             <Upload className="h-4 w-4" />
           )}
-          <span>{uploading ? "Subindo..." : `Upload ${type === "image" ? "Foto" : "Vídeo"}`}</span>
+          <span>
+            {uploading
+              ? "Subindo..."
+              : `Upload ${type === "image" ? "Foto" : type === "audio" ? "Áudio" : "Vídeo"}`}
+          </span>
           <input
             type="file"
-            accept={type === "image" ? "image/*" : "video/*"}
+            accept={type === "image" ? "image/*" : type === "audio" ? "audio/*" : "video/*"}
             className="hidden"
             onChange={handleFile}
             disabled={uploading}
@@ -1448,6 +1491,7 @@ function SettingsEditor() {
         relationship_start: form.relationship_start,
         secret_message: form.secret_message,
         hidden_video_url: form.hidden_video_url,
+        music_url: form.music_url,
         theme_mode: form.theme_mode,
         page_gate_enabled: form.page_gate_enabled,
         access_date: form.access_date,
@@ -1598,6 +1642,22 @@ function SettingsEditor() {
           onChange={(e) => setForm({ ...form, secret_message: e.target.value })}
           className="bg-white/5 rounded-xl border-white/5"
         />
+      </div>
+      <div className="space-y-2">
+        <label htmlFor="music-url" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+          Nossa Música (URL do áudio)
+        </label>
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex-1 w-full">
+            <Input
+              placeholder="URL do MP3 ou faça upload ->"
+              value={form.music_url}
+              onChange={(e) => setForm({ ...form, music_url: e.target.value })}
+              className="bg-white/5 rounded-xl border-white/5"
+            />
+          </div>
+          <MediaUpload type="audio" onUpload={(url) => setForm({ ...form, music_url: url })} />
+        </div>
       </div>
       <div className="space-y-2">
         <label htmlFor="hidden-video-url" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
@@ -1794,6 +1854,89 @@ function PlaceRow({ p, onChange }: { p: Place; onChange: () => void }) {
 }
 
 /* -------------------- Memories -------------------- */
+/* -------------------- Love Notes -------------------- */
+function LoveNotesEditor() {
+  const { data, isLoading } = useLoveNotes();
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ["love_notes"] });
+
+  async function add() {
+    const nextOrder = (data?.length ?? 0) + 1;
+    const { error } = await supabase.from("love_notes").insert({
+      text: "Nova mensagem...",
+      sort_order: nextOrder,
+    });
+    if (error) toast.error(error.message);
+    else refresh();
+  }
+
+  if (isLoading) return <Loader />;
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl bg-white/5 p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">Mural de mensagens</p>
+        <p className="mt-1">Pequenas coisas que você ama — aparecem em colunas no site.</p>
+      </div>
+      {(data ?? []).map((note) => (
+        <LoveNoteRow key={note.id} note={note} onChange={refresh} />
+      ))}
+      <Button onClick={add} variant="outline" className="w-full border-dashed rounded-xl py-8">
+        <Plus className="h-4 w-4" /> Adicionar mensagem
+      </Button>
+    </div>
+  );
+}
+
+function LoveNoteRow({ note, onChange }: { note: LoveNote; onChange: () => void }) {
+  const [form, setForm] = useState(note);
+
+  async function save() {
+    const { error } = await supabase
+      .from("love_notes")
+      .update({ text: form.text, sort_order: form.sort_order })
+      .eq("id", note.id);
+    if (error) toast.error(error.message);
+    else {
+      toastRomanticSave("notes");
+      onChange();
+    }
+  }
+
+  async function remove() {
+    if (!confirm("Remover esta mensagem?")) return;
+    const { error } = await supabase.from("love_notes").delete().eq("id", note.id);
+    if (error) toast.error(error.message);
+    else onChange();
+  }
+
+  return (
+    <div className="glass space-y-3 rounded-2xl p-4">
+      <Textarea
+        rows={2}
+        value={form.text}
+        onChange={(e) => setForm({ ...form, text: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5 font-script text-lg"
+      />
+      <div className="flex items-center justify-between">
+        <Input
+          type="number"
+          value={form.sort_order}
+          onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
+          className="w-16 bg-white/5 rounded-lg border-white/5"
+        />
+        <div className="flex gap-2">
+          <Button size="sm" onClick={save} className="rounded-lg">
+            <Save className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={remove} className="text-destructive rounded-lg">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MemoriesEditor() {
   const { data, isLoading, isError, error } = useMemoryEnvelopes();
   const qc = useQueryClient();
@@ -1876,6 +2019,8 @@ function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void })
         title: form.title,
         message: form.message,
         is_easter_egg: form.is_easter_egg,
+        is_locked: form.is_locked,
+        unlock_at: form.unlock_at || null,
         sort_order: form.sort_order,
       })
       .eq("id", m.id);
@@ -1924,16 +2069,41 @@ function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void })
           onChange={(icon_name) => setForm({ ...form, icon_name })}
         />
       </div>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
-          <Switch
-            id={`easter-${m.id}`}
-            checked={form.is_easter_egg}
-            onCheckedChange={(is_easter_egg) => setForm({ ...form, is_easter_egg })}
-          />
-          <Label htmlFor={`easter-${m.id}`} className="text-sm">
-            Marcar como easter egg
-          </Label>
+      {form.is_locked && (
+        <Input
+          type="datetime-local"
+          value={form.unlock_at ? form.unlock_at.slice(0, 16) : ""}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              unlock_at: e.target.value ? new Date(e.target.value).toISOString() : null,
+            })
+          }
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+      )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
+            <Switch
+              id={`easter-${m.id}`}
+              checked={form.is_easter_egg}
+              onCheckedChange={(is_easter_egg) => setForm({ ...form, is_easter_egg })}
+            />
+            <Label htmlFor={`easter-${m.id}`} className="text-sm">
+              Easter egg
+            </Label>
+          </div>
+          <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
+            <Switch
+              id={`locked-${m.id}`}
+              checked={form.is_locked}
+              onCheckedChange={(is_locked) => setForm({ ...form, is_locked })}
+            />
+            <Label htmlFor={`locked-${m.id}`} className="text-sm">
+              Bloqueado
+            </Label>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
