@@ -7,6 +7,8 @@ export type TimelineEvent = {
   title: string;
   description: string;
   place: string | null;
+  image_url: string | null;
+  video_url: string | null;
   sort_order: number;
 };
 
@@ -18,6 +20,8 @@ export type Stat = {
   sort_order: number;
 };
 
+export type ThemeMode = "romantic" | "soft-rose";
+
 export type SiteSettings = {
   id: number;
   love_letter: string;
@@ -26,6 +30,7 @@ export type SiteSettings = {
   relationship_start: string;
   secret_message: string;
   hidden_video_url: string;
+  theme_mode: ThemeMode | null;
 };
 
 export type GalleryImage = {
@@ -44,7 +49,7 @@ export function useTimeline() {
         .select("*")
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return data as TimelineEvent[];
+      return data;
     },
   });
 }
@@ -73,7 +78,7 @@ export function useSettings() {
         .eq("id", 1)
         .maybeSingle();
       if (error) throw error;
-      return data as SiteSettings | null;
+      return data as SiteSettings | null; // theme_mode from DB is string | null
     },
   });
 }
