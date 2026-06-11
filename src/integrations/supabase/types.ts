@@ -113,6 +113,7 @@ export type Database = {
       site_settings: {
         Row: {
           access_date: string | null
+          ending_audio_url: string
           final_message: string
           her_name: string
           hidden_video_url: string
@@ -127,6 +128,7 @@ export type Database = {
         }
         Insert: {
           access_date?: string | null
+          ending_audio_url?: string
           final_message?: string
           her_name?: string
           hidden_video_url?: string
@@ -141,6 +143,7 @@ export type Database = {
         }
         Update: {
           access_date?: string | null
+          ending_audio_url?: string
           final_message?: string
           her_name?: string
           hidden_video_url?: string
