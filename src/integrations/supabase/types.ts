@@ -47,6 +47,7 @@ export type Database = {
           love_letter: string
           relationship_start: string
           secret_message: string
+          theme_mode: string | null
           updated_at: string
         }
         Insert: {
@@ -57,6 +58,7 @@ export type Database = {
           love_letter?: string
           relationship_start?: string
           secret_message?: string
+          theme_mode?: string | null
           updated_at?: string
         }
         Update: {
@@ -67,6 +69,7 @@ export type Database = {
           love_letter?: string
           relationship_start?: string
           secret_message?: string
+          theme_mode?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -107,30 +110,36 @@ export type Database = {
           date_text: string
           description: string
           id: string
+          image_url: string | null
           place: string | null
           sort_order: number
           title: string
           updated_at: string
+          video_url: string | null
         }
         Insert: {
           created_at?: string
           date_text: string
           description: string
           id?: string
+          image_url?: string | null
           place?: string | null
           sort_order?: number
           title: string
           updated_at?: string
+          video_url?: string | null
         }
         Update: {
           created_at?: string
           date_text?: string
           description?: string
           id?: string
+          image_url?: string | null
           place?: string | null
           sort_order?: number
           title?: string
           updated_at?: string
+          video_url?: string | null
         }
         Relationships: []
       }
