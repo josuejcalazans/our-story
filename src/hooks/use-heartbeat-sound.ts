@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createAudioContext,
   HEARTBEAT_CYCLE_MS,
-  playHeartbeatPulse,
   startHeartbeatLoop,
 } from "@/lib/heartbeat-sound";
 
@@ -54,7 +53,6 @@ export function useHeartbeatSound(enabled = true) {
         if (!stopRef.current) {
           stopRef.current = startHeartbeatLoop(ctx, master);
         }
-        playHeartbeatPulse(ctx, master);
       });
     } catch {
       /* Web Audio indisponível */
