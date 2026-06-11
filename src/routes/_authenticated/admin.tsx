@@ -53,7 +53,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import QRStylePicker from "@/components/QRStylePicker";
 import { useStyledQRCode } from "@/hooks/use-styled-qr";
-import { canvasToBlob, downloadBlob, renderExportCanvas } from "@/lib/qr-export";
+import { canvasToBlob, downloadBlob, EXPORT_RESOLUTIONS, renderExportCanvas, type ExportResolution } from "@/lib/qr-export";
 import {
   fetchLogoAsDataUrl,
   readImageFileAsDataUrl,
@@ -79,6 +79,7 @@ const COLOR_PRESETS = [
 
 const HISTORY_KEY = "qr-generator-history";
 const MAX_HISTORY = 10;
+const DEFAULT_BORDER_MARGIN = 24;
 
 type ECLevel = "L" | "M" | "Q" | "H";
 const EC_LEVELS: { value: ECLevel; label: string; hint: string }[] = [
@@ -386,7 +387,7 @@ function SharePanel() {
   const [url, setUrl] = useState("");
   const [fgColor, setFgColor] = useState("#eb5e8e");
   const [bgColor, setBgColor] = useState("#ffffff");
-  const [size, setSize] = useState(256);
+  const [size, setSize] = useState(280);
   const [level, setLevel] = useState<ECLevel>("H");
   const [logoUrl, setLogoUrl] = useState("");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -404,6 +405,8 @@ function SharePanel() {
     REFERENCE_STYLE_PRESET.cornerDotStyle,
   );
   const [includeMargin, setIncludeMargin] = useState(true);
+  const [borderMargin, setBorderMargin] = useState(DEFAULT_BORDER_MARGIN);
+  const [exportResolution, setExportResolution] = useState<ExportResolution>("preview");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -577,14 +580,17 @@ function SharePanel() {
 
     setIsExporting(true);
     try {
+      const margin = includeMargin ? borderMargin : 0;
       const exportCanvas = await renderExportCanvas(
         styledQROptions,
-        includeMargin ? 40 : 0,
-        "preview",
-        qrCanvasRef.current?.querySelector("canvas"),
+        margin,
+        exportResolution,
+        exportResolution === "preview" ? qrCanvasRef.current?.querySelector("canvas") : undefined,
       );
       const blob = await canvasToBlob(exportCanvas);
-      downloadBlob(blob, `qrcode-historia-${Date.now()}.png`);
+      const resolutionLabel =
+        EXPORT_RESOLUTIONS.find((r) => r.value === exportResolution)?.label ?? "preview";
+      downloadBlob(blob, `qrcode-historia-${resolutionLabel.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}.png`);
       saveToHistory();
       toast.success("QR Code baixado!");
     } catch {
@@ -592,7 +598,7 @@ function SharePanel() {
     } finally {
       setIsExporting(false);
     }
-  }, [url, styledQROptions, includeMargin, isExporting, saveToHistory]);
+  }, [url, styledQROptions, includeMargin, borderMargin, exportResolution, isExporting, saveToHistory]);
 
   const restoreItem = (item: HistoryItem) => {
     setFgColor(item.fgColor);
@@ -975,11 +981,55 @@ function SharePanel() {
           </TabsContent>
         </Tabs>
 
-        <div className="flex items-center gap-2 pt-4 border-t border-white/5">
-          <Switch id="margin-mode" checked={includeMargin} onCheckedChange={setIncludeMargin} />
-          <label htmlFor="margin-mode" className="text-xs text-muted-foreground cursor-pointer">
-            Incluir margem branca no download
-          </label>
+        <div className="space-y-4 pt-4 border-t border-white/5">
+          <div className="flex items-center gap-2">
+            <Switch id="margin-mode" checked={includeMargin} onCheckedChange={setIncludeMargin} />
+            <label htmlFor="margin-mode" className="text-xs text-muted-foreground cursor-pointer">
+              Incluir margem branca no download
+            </label>
+          </div>
+
+          {includeMargin && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>BORDA LATERAL</span>
+                <span>{borderMargin}px</span>
+              </div>
+              <Slider
+                value={[borderMargin]}
+                onValueChange={([v]) => setBorderMargin(v)}
+                min={0}
+                max={80}
+                step={2}
+                className="accent-accent"
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Resolução
+            </Label>
+            <div className="grid grid-cols-3 gap-2">
+              {EXPORT_RESOLUTIONS.map((resolution) => (
+                <Button
+                  key={resolution.value}
+                  type="button"
+                  variant={exportResolution === resolution.value ? "default" : "secondary"}
+                  size="sm"
+                  onClick={() => setExportResolution(resolution.value)}
+                  className="flex flex-col h-auto py-2 rounded-xl"
+                >
+                  <span className="font-semibold text-xs">{resolution.label}</span>
+                  <span className="text-[10px] opacity-70">
+                    {resolution.size
+                      ? `${resolution.size}×${resolution.size}`
+                      : `${size + (includeMargin ? borderMargin : 0) * 2}px`}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
