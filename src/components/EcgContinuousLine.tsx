@@ -6,19 +6,29 @@ import {
   type EcgSegments,
   queueEcgBeat,
 } from "@/lib/heartbeat-ecg-canvas";
-import { cycleMsToBpm, getHeartbeatCycleMs, STORY_LOADER_MIN_MS } from "@/lib/heartbeat-loader-timing";
+import {
+  cycleMsToBpm,
+  getCinematicHeartbeatBpm,
+  getHeartbeatCycleMs,
+  STORY_LOADER_MIN_MS,
+  CINEMATIC_HEART_MS,
+} from "@/lib/heartbeat-loader-timing";
 
 export default function EcgContinuousLine({
   elapsedMs,
   beatKey,
   running = true,
   totalMs = STORY_LOADER_MIN_MS,
+  bpm,
 }: {
   elapsedMs: number;
   beatKey: number;
   running?: boolean;
   totalMs?: number;
+  bpm?: number;
 }) {
+  const resolveBpm = (elapsed: number) =>
+    bpm ?? (totalMs === CINEMATIC_HEART_MS ? getCinematicHeartbeatBpm(elapsed) : cycleMsToBpm(getHeartbeatCycleMs(elapsed, totalMs)));
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const segmentsRef = useRef<EcgSegments>({});
   const headXRef = useRef(0);
@@ -31,9 +41,8 @@ export default function EcgContinuousLine({
   useEffect(() => {
     if (!running || beatKey === lastBeatKeyRef.current) return;
     lastBeatKeyRef.current = beatKey;
-    const bpm = cycleMsToBpm(getHeartbeatCycleMs(elapsedRef.current, totalMs));
-    queueEcgBeat(segmentsRef.current, headXRef.current, bpm);
-  }, [beatKey, running]);
+    queueEcgBeat(segmentsRef.current, headXRef.current, resolveBpm(elapsedRef.current));
+  }, [beatKey, running, totalMs, bpm]);
 
   useEffect(() => {
     if (!running) return;
@@ -50,7 +59,7 @@ export default function EcgContinuousLine({
       const dt = Math.min((ts - prevTsRef.current) / 1000, 0.05);
       prevTsRef.current = ts;
 
-      const currentBpm = cycleMsToBpm(getHeartbeatCycleMs(elapsedRef.current, totalMs));
+      const currentBpm = resolveBpm(elapsedRef.current);
       headXRef.current += (55 + currentBpm * 0.75) * dt;
 
       const headFloor = Math.floor(headXRef.current);
@@ -68,7 +77,7 @@ export default function EcgContinuousLine({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [running, totalMs]);
+  }, [running, totalMs, bpm]);
 
   return (
     <div

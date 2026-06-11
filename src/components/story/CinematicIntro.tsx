@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Heart } from "lucide-react";
 import EcgContinuousLine from "@/components/EcgContinuousLine";
@@ -18,23 +18,19 @@ import { fadeOutHeartbeatAudioSession } from "@/lib/heartbeat-audio-session";
 
 export { STORY_LOADER_MIN_MS };
 
-/** 0s silêncio → 2s primeiro batimento → 5s ECG → 8s acelera → 12s flash */
 const STAGE_1_MS = 2000;
 const STAGE_2_MS = 3000;
 const STAGE_3_MS = 3000;
 const STAGE_4_MS = 4000;
 const STAGE_5_MS = 2800;
 const STAGE_6_MS = 10000;
+const FINALE_MS = 2000;
 
 const EMOTIONAL_PHRASES = [
   "Lembrando nosso primeiro encontro...",
   "Revisitando nossas viagens...",
   "Organizando nossas fotos...",
   "Guardando tudo para sempre...",
-] as const;
-
-const BEAT_LINES = [
-  { key: "stronger", text: "Algo está batendo mais forte...", className: "font-letter text-lg italic text-muted-foreground sm:text-xl" },
 ] as const;
 
 type Stage = 1 | 2 | 3 | 4 | 5 | 6;
@@ -89,14 +85,70 @@ function EmotionalProgress({ phraseIdx }: { phraseIdx: number }) {
   );
 }
 
+function HeartExplosion({ active }: { active: boolean }) {
+  const particles = useMemo(
+    () =>
+      Array.from({ length: 40 }, (_, id) => ({
+        id,
+        angle: (id / 40) * 360 + (id % 7) * 8,
+        distance: 100 + (id % 6) * 55,
+        size: 6 + (id % 5) * 3,
+        delay: (id % 8) * 0.025,
+      })),
+    [],
+  );
+
+  return (
+    <AnimatePresence>
+      {active && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+        >
+          {particles.map((p) => (
+            <motion.div
+              key={p.id}
+              className="absolute"
+              initial={{ x: 0, y: 0, scale: 0, opacity: 0 }}
+              animate={{
+                x: Math.cos((p.angle * Math.PI) / 180) * p.distance,
+                y: Math.sin((p.angle * Math.PI) / 180) * p.distance,
+                scale: [0, 1.3, 0.7],
+                opacity: [0, 1, 0],
+                rotate: [0, p.angle * 0.4],
+              }}
+              transition={{ duration: 1.5, delay: p.delay, ease: "easeOut" }}
+            >
+              <Heart
+                className="fill-accent text-accent"
+                style={{ width: p.size, height: p.size }}
+                aria-hidden
+              />
+            </motion.div>
+          ))}
+          <motion.div
+            initial={{ scale: 1, opacity: 1 }}
+            animate={{ scale: 4, opacity: 0 }}
+            transition={{ duration: 0.85, ease: "easeOut" }}
+          >
+            <Heart className="h-16 w-16 fill-accent text-accent drop-shadow-[0_0_40px_rgba(236,72,153,0.8)]" aria-hidden />
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 export default function CinematicIntro({ onComplete }: { onComplete: () => void }) {
   const [stage, setStage] = useState<Stage>(1);
-  const [beatLine, setBeatLine] = useState(0);
   const [phraseIdx, setPhraseIdx] = useState(0);
-  const [flash, setFlash] = useState(false);
+  const [finale, setFinale] = useState(false);
+  const [darkness, setDarkness] = useState(0);
   const [currentBpm, setCurrentBpm] = useState(55);
 
-  const heartActive = stage >= 2 && stage <= 4;
+  const heartActive = stage >= 2 && stage <= 4 && !finale;
   const { elapsedMs, getElapsedMs } = useLoaderElapsedMs(heartActive);
   const audioStopAtMs = getHeartbeatAudioStopAtMs(CINEMATIC_HEART_MS);
   const running = heartActive && elapsedMs < audioStopAtMs;
@@ -123,19 +175,6 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
   }, []);
 
   useEffect(() => {
-    if (stage !== 2) {
-      setBeatLine(0);
-      return;
-    }
-    const timers = [
-      setTimeout(() => setBeatLine(1), 400),
-      setTimeout(() => setBeatLine(2), 1200),
-      setTimeout(() => setBeatLine(3), 2200),
-    ];
-    return () => timers.forEach(clearTimeout);
-  }, [stage]);
-
-  useEffect(() => {
     const durations: Record<Stage, number> = {
       1: STAGE_1_MS,
       2: STAGE_2_MS,
@@ -145,28 +184,30 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
       6: STAGE_6_MS,
     };
 
-    if (stage === 4) return;
+    if (stage === 4 || finale) return;
 
     const t = setTimeout(() => {
       if (stage < 6) setStage((stage + 1) as Stage);
     }, durations[stage]);
 
     return () => clearTimeout(t);
-  }, [stage]);
+  }, [stage, finale]);
 
   useEffect(() => {
-    if (stage !== 4 || fadingRef.current) return;
+    if (stage !== 4 || fadingRef.current || finale) return;
     if (elapsedMs < audioStopAtMs) return;
 
     fadingRef.current = true;
+    setFinale(true);
+
     void fadeOut().then(() => {
-      setFlash(true);
+      setDarkness(0.92);
       setTimeout(() => {
-        setFlash(false);
         setStage(5);
-      }, 500);
+        setTimeout(() => setDarkness(0), 600);
+      }, FINALE_MS);
     });
-  }, [stage, elapsedMs, audioStopAtMs, fadeOut]);
+  }, [stage, elapsedMs, audioStopAtMs, fadeOut, finale]);
 
   useEffect(() => {
     if (stage !== 6) return;
@@ -217,34 +258,39 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
 
   useEffect(() => () => void fadeOutHeartbeatAudioSession(), []);
 
-  const showEcg = stage >= 3 && stage <= 4;
+  const showEcg = stage >= 3 && stage <= 4 && !finale;
   const subtitle =
-    stage === 3
-      ? "Parece que alguém está chegando..."
-      : stage === 4
-        ? "Acho que é você."
-        : null;
+    stage === 2
+      ? "Algo está batendo mais forte..."
+      : stage === 3
+        ? "Parece que alguém está chegando..."
+        : stage === 4
+          ? "Acho que é você."
+          : null;
+
+  const showHeartBlock = stage <= 4 && !finale;
 
   return (
     <div className="relative min-h-[100svh] overflow-hidden bg-background">
       <div className="absolute inset-0 bg-glow" />
-      {flash && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: [0, 0.9, 0] }}
-          transition={{ duration: 0.5 }}
-          className="pointer-events-none absolute inset-0 z-40 bg-white"
-        />
-      )}
+
+      <motion.div
+        className="pointer-events-none absolute inset-0 z-20 bg-[#070014]"
+        animate={{ opacity: darkness }}
+        transition={{ duration: finale ? 0.9 : 0.6, ease: "easeInOut" }}
+      />
+
+      <HeartExplosion active={finale} />
 
       <div className="relative z-10 flex min-h-[100svh] items-center justify-center px-6">
         <AnimatePresence mode="wait">
-          {stage <= 4 && (
+          {showHeartBlock && (
             <motion.div
               key="heart-block"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              exit={{ opacity: 0, scale: 0.85, filter: "blur(8px)" }}
+              transition={{ duration: 0.5 }}
               className="flex w-full max-w-sm flex-col items-center justify-center"
             >
               <div
@@ -280,33 +326,17 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
                 )}
               </div>
 
-              <div className="mt-10 flex min-h-[5.5rem] w-full items-center justify-center text-center">
-                {stage === 2 && (
-                  <AnimatePresence mode="wait">
-                    <motion.p
-                      key={BEAT_LINES[beatLine].key}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -8 }}
-                      transition={{ duration: 0.55 }}
-                      className={BEAT_LINES[beatLine].className}
-                    >
-                      {BEAT_LINES[beatLine].text}
-                    </motion.p>
-                  </AnimatePresence>
-                )}
-                {subtitle && (
-                  <motion.p
-                    key={subtitle}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.7 }}
-                    className="font-letter text-lg italic text-muted-foreground sm:text-xl"
-                  >
-                    {subtitle}
-                  </motion.p>
-                )}
-              </div>
+              {subtitle && (
+                <motion.p
+                  key={subtitle}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.7 }}
+                  className="mt-10 font-letter text-center text-lg italic text-muted-foreground sm:text-xl"
+                >
+                  {subtitle}
+                </motion.p>
+              )}
 
               {showEcg && (
                 <motion.div
@@ -330,8 +360,9 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
           {stage === 5 && (
             <motion.div
               key="preparing"
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 1.1, ease: "easeOut" }}
               className="w-full max-w-sm text-center"
             >
               <h1 className="font-display text-3xl sm:text-4xl">
@@ -348,6 +379,7 @@ export default function CinematicIntro({ onComplete }: { onComplete: () => void 
               key="phrases"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
+              transition={{ duration: 0.8 }}
               className="w-full max-w-sm text-center"
             >
               <EmotionalProgress phraseIdx={phraseIdx} />
