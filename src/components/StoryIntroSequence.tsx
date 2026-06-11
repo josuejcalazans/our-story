@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import CinematicIntro, { STORY_LOADER_MIN_MS } from "@/components/story/CinematicIntro";
 import StoryWelcomeScreen from "@/components/story/StoryWelcomeScreen";
 import { stopHeartbeatAudioSession } from "@/lib/heartbeat-audio-session";
-import { useSettings } from "@/lib/use-site-content";
+import { preloadStoryAssets } from "@/lib/preload-story-assets";
+import { useSettings, useGallery } from "@/lib/use-site-content";
 
 export { STORY_LOADER_MIN_MS };
 
@@ -12,8 +13,16 @@ type Phase = "cinematic" | "welcome";
 export default function StoryIntroSequence({ onComplete }: { onComplete: () => void }) {
   const [phase, setPhase] = useState<Phase>("cinematic");
   const { data: settings } = useSettings();
+  const { data: gallery } = useGallery();
 
   useEffect(() => () => stopHeartbeatAudioSession(), []);
+
+  useEffect(() => {
+    void preloadStoryAssets({
+      musicUrl: settings?.music_url,
+      galleryImageUrls: (gallery ?? []).map((g) => g.image_url),
+    });
+  }, [settings?.music_url, gallery]);
 
   const handleWelcomeReady = () => {
     stopHeartbeatAudioSession();
