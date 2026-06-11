@@ -1,19 +1,46 @@
 import { motion } from "framer-motion";
-import { Heart } from "lucide-react";
+import { Heart, Volume2, VolumeX } from "lucide-react";
+import { useHeartbeatSound } from "@/hooks/use-heartbeat-sound";
+import { HEARTBEAT_CYCLE_MS } from "@/lib/heartbeat-sound";
 
 /** Tempo mínimo na tela antes de mostrar senha ou história */
 export const STORY_LOADER_MIN_MS = 3200;
 
-const BEAT_DURATION = 2.4;
+const BEAT_DURATION = HEARTBEAT_CYCLE_MS / 1000;
 
 export default function StoryHeartbeatLoader({
   message = "Preparando nossa história...",
+  sound = true,
 }: {
   message?: string;
+  sound?: boolean;
 }) {
+  const { muted, needsTap, toggleMute, enableSound } = useHeartbeatSound(sound);
+
   return (
     <div className="relative flex min-h-[100svh] flex-col items-center justify-center overflow-hidden bg-background">
       <div className="absolute inset-0 bg-glow" />
+
+      <div className="absolute right-4 top-4 z-20 flex items-center gap-2">
+        {needsTap && (
+          <button
+            type="button"
+            onClick={() => void enableSound()}
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground cursor-pointer"
+          >
+            Ativar batimento
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={toggleMute}
+          aria-label={muted ? "Ativar som do coração" : "Silenciar som do coração"}
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground cursor-pointer"
+        >
+          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+        </button>
+      </div>
+
       <div className="relative z-10 flex flex-col items-center gap-10 px-6">
         <motion.div
           className="relative flex h-20 w-20 items-center justify-center"
