@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import OurStory from "@/components/OurStory";
+import PageGate from "@/components/PageGate";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -10,5 +11,9 @@ export const Route = createFileRoute("/")({
       { property: "og:description", content: "Preparei algo especial para você." },
     ],
   }),
-  component: OurStory,
+  component: () => (
+    <PageGate>
+      <OurStory />
+    </PageGate>
+  ),
 });

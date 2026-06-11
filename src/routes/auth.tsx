@@ -11,6 +11,31 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+function romanticAuthError(error: unknown, mode: "signin" | "signup"): string {
+  const message = error instanceof Error ? error.message : "";
+  const lower = message.toLowerCase();
+
+  if (lower.includes("invalid login credentials") || lower.includes("invalid credentials")) {
+    return "O coração reconhece quem é de casa — mas email ou senha não combinaram desta vez.";
+  }
+  if (lower.includes("email not confirmed")) {
+    return "Confirme seu email antes de abrir este capítulo da nossa história.";
+  }
+  if (lower.includes("user already registered")) {
+    return "Esse email já faz parte da história. Tente entrar, em vez de criar outra conta.";
+  }
+  if (lower.includes("password") && (lower.includes("least") || lower.includes("short"))) {
+    return "A senha precisa ter pelo menos 6 caracteres — promessas não podem ser curtas demais.";
+  }
+  if (lower.includes("invalid email")) {
+    return "Esse email não parece certo. Confira com carinho e tente de novo.";
+  }
+
+  return mode === "signin"
+    ? "Não foi desta vez. Respira, confere os dados e tenta entrar de novo."
+    : "Não conseguimos criar sua conta agora. Tente novamente em instantes.";
+}
+
 function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -44,7 +69,7 @@ function AuthPage() {
         navigate({ to: "/heart-panel", search: { tab: "timeline" } });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro");
+      toast.error(romanticAuthError(err, mode));
     } finally {
       setLoading(false);
     }
