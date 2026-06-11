@@ -20,9 +20,10 @@ export default function StoryIntroSequence({ onComplete }: { onComplete: () => v
   useEffect(() => {
     void preloadStoryAssets({
       musicUrl: settings?.music_url,
+      endingAudioUrl: settings?.ending_audio_url,
       galleryImageUrls: (gallery ?? []).map((g) => g.image_url),
     });
-  }, [settings?.music_url, gallery]);
+  }, [settings?.music_url, settings?.ending_audio_url, gallery]);
 
   const handleWelcomeReady = () => {
     stopHeartbeatAudioSession();
