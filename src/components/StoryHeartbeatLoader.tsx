@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Volume2, VolumeX } from "lucide-react";
+import EcgContinuousLine from "@/components/EcgContinuousLine";
 import { useHeartbeatSound } from "@/hooks/use-heartbeat-sound";
 import {
-  getHeartbeatCycleMs,
+  buildBeatSchedule,
+  getHeartScale,
   HEARTBEAT_ACCELERATE_AT_MS,
   STORY_LOADER_MIN_MS,
 } from "@/lib/heartbeat-loader-timing";
 
 export { STORY_LOADER_MIN_MS };
-
-const BEAT_TIMES = [0, 0.12, 0.22, 0.34, 0.44, 0.58, 1] as const;
-const BEAT_SCALE = [1, 1.28, 1, 1.14, 1, 1.06, 1] as const;
 
 function useLoaderElapsedMs() {
   const startRef = useRef(performance.now());
@@ -20,7 +19,7 @@ function useLoaderElapsedMs() {
   useEffect(() => {
     const tick = () => setElapsedMs(performance.now() - startRef.current);
     tick();
-    const id = window.setInterval(tick, 50);
+    const id = window.setInterval(tick, 32);
     return () => window.clearInterval(id);
   }, []);
 
@@ -35,9 +34,25 @@ export default function StoryHeartbeatLoader({
   sound?: boolean;
 }) {
   const { elapsedMs, getElapsedMs } = useLoaderElapsedMs();
-  const cycleMs = getHeartbeatCycleMs(elapsedMs);
-  const cycleSec = cycleMs / 1000;
+  const beatSchedule = useMemo(() => buildBeatSchedule(), []);
+  const heartScale = getHeartScale(elapsedMs, beatSchedule);
   const accelerating = elapsedMs >= HEARTBEAT_ACCELERATE_AT_MS;
+
+  const lastLubRef = useRef(-1);
+  const [rippleKey, setRippleKey] = useState(0);
+
+  useEffect(() => {
+    const lubs = beatSchedule.filter((b) => b.kind === "lub");
+    for (let i = 0; i < lubs.length; i++) {
+      const lub = lubs[i];
+      if (!lub) continue;
+      if (elapsedMs >= lub.atMs && elapsedMs < lub.atMs + 60 && lastLubRef.current !== i) {
+        lastLubRef.current = i;
+        setRippleKey(i);
+        break;
+      }
+    }
+  }, [elapsedMs, beatSchedule]);
 
   const { muted, unlocked, needsTap, mute, unmuteFromGesture, unlockFromGesture } =
     useHeartbeatSound(sound, getElapsedMs);
@@ -67,70 +82,24 @@ export default function StoryHeartbeatLoader({
       </button>
 
       <div className="relative z-10 flex flex-col items-center gap-10 px-6">
-        <motion.div
+        <div
           className="relative flex h-20 w-20 items-center justify-center"
-          animate={{ scale: [...BEAT_SCALE] }}
-          transition={{
-            duration: cycleSec,
-            repeat: Number.POSITIVE_INFINITY,
-            ease: accelerating ? "easeIn" : "easeInOut",
-            times: [...BEAT_TIMES],
-          }}
+          style={{ transform: `scale(${heartScale})`, willChange: "transform" }}
         >
           <Heart className="relative z-10 h-12 w-12 fill-accent text-accent drop-shadow-[0_0_28px_oklch(0.74_0.21_350_/_0.55)]" />
-          <motion.span
-            className="absolute inset-0 rounded-full border border-accent/50"
-            animate={{ scale: [0.85, 1.55], opacity: [0.55, 0] }}
-            transition={{
-              duration: cycleSec,
-              repeat: Number.POSITIVE_INFINITY,
-              ease: "easeOut",
-              times: [0.1, 1],
-            }}
-          />
-          <motion.span
-            className="absolute inset-0 rounded-full border border-primary/40"
-            animate={{ scale: [0.9, 1.35], opacity: [0.4, 0] }}
-            transition={{
-              duration: cycleSec,
-              repeat: Number.POSITIVE_INFINITY,
-              ease: "easeOut",
-              delay: 0.34 * cycleSec,
-              times: [0.1, 1],
-            }}
-          />
-        </motion.div>
-
-        <div className="relative w-56 max-w-[70vw]">
-          <svg
-            viewBox="0 0 280 56"
-            className="h-12 w-full text-accent/90"
-            aria-hidden
-            preserveAspectRatio="none"
-          >
-            <defs>
-              <linearGradient id="ecg-glow" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="oklch(0.74 0.21 350 / 0)" />
-                <stop offset="45%" stopColor="oklch(0.74 0.21 350 / 0.9)" />
-                <stop offset="100%" stopColor="oklch(0.66 0.25 305 / 0.2)" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0 28 H72 L82 10 L92 46 L102 28 H148 L158 18 L168 28 H280"
-              fill="none"
-              stroke="url(#ecg-glow)"
-              strokeWidth="2.25"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="ecg-line"
-              style={{ animationDuration: `${cycleSec}s` }}
+          <AnimatePresence mode="popLayout">
+            <motion.span
+              key={rippleKey}
+              className="absolute inset-0 rounded-full border border-accent/50"
+              initial={{ scale: 0.85, opacity: 0.55 }}
+              animate={{ scale: 1.55, opacity: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.65, ease: "easeOut" }}
             />
-          </svg>
-          <div
-            className="ecg-scan-line pointer-events-none absolute inset-y-0 left-0 w-8"
-            style={{ animationDuration: `${cycleSec}s` }}
-          />
+          </AnimatePresence>
         </div>
+
+        <EcgContinuousLine elapsedMs={elapsedMs} />
 
         <motion.p
           className="font-letter text-center text-sm italic text-muted-foreground"

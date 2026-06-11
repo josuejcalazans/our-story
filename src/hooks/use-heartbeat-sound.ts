@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createAudioContext, startHeartbeatLoop } from "@/lib/heartbeat-sound";
+import { createAudioContext, scheduleLoaderHeartbeat } from "@/lib/heartbeat-sound";
 
 export function useHeartbeatSound(enabled = true, getElapsedMs: () => number) {
   const ctxRef = useRef<AudioContext | null>(null);
@@ -49,7 +49,7 @@ export function useHeartbeatSound(enabled = true, getElapsedMs: () => number) {
         master.gain.value = 0.72;
         setUnlocked(true);
         if (!stopRef.current) {
-          stopRef.current = startHeartbeatLoop(ctx, master, () => getElapsedRef.current());
+          stopRef.current = scheduleLoaderHeartbeat(ctx, master, () => getElapsedRef.current());
         }
       });
     } catch {
