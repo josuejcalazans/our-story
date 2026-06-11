@@ -587,12 +587,12 @@ function LoveLetter({ letter }: { letter: string }) {
 /* ------------------------- Memories with heart-tap easter egg ------------------------- */
 function Memories({ onHeartTaps }: { onHeartTaps: () => void }) {
   const envelopes = [
-    { emoji: "💌", title: "Para os dias difíceis", message: "Respira. Eu tô aqui. Sempre." },
-    { emoji: "🌟", title: "Para sonhar comigo", message: "Tem uma vida inteira nos esperando." },
-    { emoji: "🎶", title: "Nossa música", message: "Toca, fecha os olhos, e lembra de mim." },
-    { emoji: "🌹", title: "Só porque sim", message: "Você é a parte boa do meu dia." },
+    { id: "hard-days", emoji: "💌", title: "Para os dias difíceis", message: "Respira. Eu tô aqui. Sempre." },
+    { id: "dream-together", emoji: "🌟", title: "Para sonhar comigo", message: "Tem uma vida inteira nos esperando." },
+    { id: "our-song", emoji: "🎶", title: "Nossa música", message: "Toca, fecha os olhos, e lembra de mim." },
+    { id: "just-because", emoji: "🌹", title: "Só porque sim", message: "Você é a parte boa do meu dia." },
   ];
-  const [open, setOpen] = useState<Record<number, boolean>>({});
+  const [open, setOpen] = useState<Record<string, boolean>>({});
   const [taps, setTaps] = useState(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -616,13 +616,13 @@ function Memories({ onHeartTaps }: { onHeartTaps: () => void }) {
         Toque em cada envelope.
       </p>
       <div className="mt-10 grid gap-5 sm:grid-cols-2">
-        {envelopes.map((e, i) => {
-          const isOpen = open[i];
+        {envelopes.map((e) => {
+          const isOpen = open[e.id];
           return (
             <button
               type="button"
-              key={`envelope-${i}`}
-              onClick={() => setOpen({ ...open, [i]: !isOpen })}
+              key={e.id}
+              onClick={() => setOpen({ ...open, [e.id]: !isOpen })}
               className="glass group relative overflow-hidden rounded-2xl p-6 text-left transition-all hover:shadow-glow cursor-pointer"
             >
               <motion.div
