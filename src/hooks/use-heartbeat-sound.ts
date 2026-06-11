@@ -17,7 +17,7 @@ export function useHeartbeatSound(enabled = true) {
     if (!ctxRef.current || ctxRef.current.state === "closed") {
       const ctx = createAudioContext();
       const master = ctx.createGain();
-      master.gain.value = 0.9;
+      master.gain.value = 0.72;
       master.connect(ctx.destination);
       ctxRef.current = ctx;
       masterRef.current = master;
@@ -49,7 +49,7 @@ export function useHeartbeatSound(enabled = true) {
 
       void ctx.resume().then(() => {
         if (ctx.state !== "running") return;
-        master.gain.value = 0.9;
+        master.gain.value = 0.72;
         setUnlocked(true);
         if (!stopRef.current) {
           stopRef.current = startHeartbeatLoop(ctx, master);

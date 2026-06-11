@@ -1,44 +1,66 @@
 /** Duração de um ciclo visual do coração (ms) — manter em sync com StoryHeartbeatLoader */
 export const HEARTBEAT_CYCLE_MS = 2400;
 
-const SECOND_THUMP_DELAY_MS = 130;
+/** Intervalo natural entre "lub" e "dub" (~66 bpm em repouso) */
+const LUB_TO_DUB_SEC = 0.105;
 
-function createThump(ctx: AudioContext, time: number, volume: number) {
+export function createAudioContext(): AudioContext {
+  const Win = window as Window & { webkitAudioContext?: typeof AudioContext };
+  const Ctor = Win.AudioContext ?? Win.webkitAudioContext;
+  if (!Ctor) throw new Error("Web Audio não suportado");
+  return new Ctor();
+}
+
+/** Um "tum" grave e abafado — sem ruído metálico */
+function thump(
+  ctx: AudioContext,
+  master: GainNode,
+  time: number,
+  baseHz: number,
+  peakGain: number,
+  decaySec: number,
+) {
   const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
+  const tone = ctx.createGain();
   const filter = ctx.createBiquadFilter();
+  const out = ctx.createGain();
 
   osc.type = "sine";
-  osc.frequency.setValueAtTime(72, time);
-  osc.frequency.exponentialRampToValueAtTime(38, time + 0.1);
+  osc.frequency.setValueAtTime(baseHz, time);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(20, baseHz * 0.52), time + decaySec * 0.55);
 
   filter.type = "lowpass";
-  filter.frequency.setValueAtTime(180, time);
+  filter.frequency.setValueAtTime(120, time);
+  filter.frequency.exponentialRampToValueAtTime(55, time + decaySec);
+  filter.Q.setValueAtTime(0.6, time);
 
-  gain.gain.setValueAtTime(0.0001, time);
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume * 0.22), time + 0.018);
-  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.14);
+  tone.gain.setValueAtTime(0, time);
+  tone.gain.linearRampToValueAtTime(peakGain, time + 0.006);
+  tone.gain.exponentialRampToValueAtTime(0.0001, time + decaySec);
 
   osc.connect(filter);
-  filter.connect(gain);
-  gain.connect(ctx.destination);
+  filter.connect(tone);
+  tone.connect(out);
+  out.connect(master);
 
   osc.start(time);
-  osc.stop(time + 0.16);
+  osc.stop(time + decaySec + 0.05);
 }
 
-export function playHeartbeatPulse(ctx: AudioContext, volume = 1) {
-  if (ctx.state !== "running") return;
-  const now = ctx.currentTime;
-  createThump(ctx, now, volume);
-  createThump(ctx, now + SECOND_THUMP_DELAY_MS / 1000, volume * 0.62);
+/** Par lub–dub clássico */
+function lubDub(ctx: AudioContext, master: GainNode, time: number, intensity = 1) {
+  thump(ctx, master, time, 52, 0.38 * intensity, 0.28);
+  thump(ctx, master, time + LUB_TO_DUB_SEC, 44, 0.16 * intensity, 0.22);
 }
 
-export async function startHeartbeatLoop(ctx: AudioContext) {
-  await ctx.resume();
-  if (ctx.state !== "running") return null;
+export function playHeartbeatPulse(ctx: AudioContext, master: GainNode, volume = 1) {
+  if (ctx.state === "closed") return;
+  const t = ctx.currentTime + 0.01;
+  lubDub(ctx, master, t, volume);
+}
 
-  const tick = () => playHeartbeatPulse(ctx);
+export function startHeartbeatLoop(ctx: AudioContext, master: GainNode) {
+  const tick = () => playHeartbeatPulse(ctx, master);
   tick();
   const interval = window.setInterval(tick, HEARTBEAT_CYCLE_MS);
   return () => window.clearInterval(interval);
