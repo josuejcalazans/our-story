@@ -87,7 +87,7 @@ export function useGallery() {
         .select("*")
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return data as GalleryImage[];
+      return data;
     },
   });
 }
