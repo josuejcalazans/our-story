@@ -1,13 +1,14 @@
-/** Duração de um ciclo visual do coração (ms) — manter em sync com StoryHeartbeatLoader */
-export const HEARTBEAT_CYCLE_MS = 2400;
+import {
+  getHeartbeatCycleMs,
+  getLubDubOffsetsSec,
+} from "@/lib/heartbeat-loader-timing";
 
-/** Picos da animação do coração (times em StoryHeartbeatLoader) */
-const LUB_AT_CYCLE = 0.12;
-const DUB_AT_CYCLE = 0.34;
-
-const CYCLE_SEC = HEARTBEAT_CYCLE_MS / 1000;
-const LUB_AT_SEC = LUB_AT_CYCLE * CYCLE_SEC;
-const DUB_AT_SEC = DUB_AT_CYCLE * CYCLE_SEC;
+export {
+  STORY_LOADER_MIN_MS,
+  HEARTBEAT_ACCELERATE_AT_MS,
+  HEARTBEAT_CYCLE_SLOW_MS,
+  getHeartbeatCycleMs,
+} from "@/lib/heartbeat-loader-timing";
 
 export function createAudioContext(): AudioContext {
   const Win = window as Window & { webkitAudioContext?: typeof AudioContext };
@@ -72,35 +73,37 @@ function lubDubAt(
   ctx: AudioContext,
   master: GainNode,
   cycleStart: number,
+  cycleMs: number,
   intensity = 1,
 ) {
-  thump(ctx, master, cycleStart + LUB_AT_SEC, 62, 0.32 * intensity, 0.2);
-  thump(ctx, master, cycleStart + DUB_AT_SEC, 48, 0.14 * intensity, 0.16);
+  const { lubAtSec, dubAtSec } = getLubDubOffsetsSec(cycleMs);
+  thump(ctx, master, cycleStart + lubAtSec, 62, 0.32 * intensity, 0.2);
+  thump(ctx, master, cycleStart + dubAtSec, 48, 0.14 * intensity, 0.16);
 }
 
-export function playHeartbeatPulse(ctx: AudioContext, master: GainNode, volume = 1) {
-  if (ctx.state === "closed") return;
-  lubDubAt(ctx, master, ctx.currentTime + 0.01, volume);
-}
-
-export function startHeartbeatLoop(ctx: AudioContext, master: GainNode) {
+export function startHeartbeatLoop(
+  ctx: AudioContext,
+  master: GainNode,
+  getElapsedMs: () => number,
+) {
   let nextCycleStart = ctx.currentTime;
   let timerId: ReturnType<typeof setTimeout> | undefined;
+
+  const elapsedAtAudioTime = (audioTime: number) => {
+    const deltaSec = audioTime - ctx.currentTime;
+    return getElapsedMs() + deltaSec * 1000;
+  };
 
   const schedule = () => {
     if (ctx.state === "closed") return;
 
-    while (nextCycleStart < ctx.currentTime + CYCLE_SEC * 4) {
-      lubDubAt(ctx, master, nextCycleStart);
-      nextCycleStart += CYCLE_SEC;
+    while (nextCycleStart < ctx.currentTime + 3) {
+      const cycleMs = getHeartbeatCycleMs(Math.max(0, elapsedAtAudioTime(nextCycleStart)));
+      lubDubAt(ctx, master, nextCycleStart, cycleMs);
+      nextCycleStart += cycleMs / 1000;
     }
 
-    const leadSec = CYCLE_SEC * 2;
-    const msUntilReschedule = Math.max(
-      80,
-      (nextCycleStart - ctx.currentTime - leadSec) * 1000,
-    );
-    timerId = window.setTimeout(schedule, msUntilReschedule);
+    timerId = window.setTimeout(schedule, 100);
   };
 
   schedule();
