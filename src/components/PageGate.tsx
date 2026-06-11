@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { stopHeartbeatAudioSession } from "@/lib/heartbeat-audio-session";
 import { motion } from "framer-motion";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,10 @@ export default function PageGate({ children }: { children: React.ReactNode }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
   const [introDone, setIntroDone] = useState(false);
+
+  useEffect(() => {
+    if (introDone) stopHeartbeatAudioSession();
+  }, [introDone]);
 
   if (!introDone) {
     return <StoryIntroSequence onComplete={() => setIntroDone(true)} />;

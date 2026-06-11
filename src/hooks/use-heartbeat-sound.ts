@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   getHeartbeatSession,
   isHeartbeatAudioStopped,
@@ -9,11 +9,8 @@ import {
 } from "@/lib/heartbeat-audio-session";
 import { playHeartbeatBeat } from "@/lib/heartbeat-sound";
 
-export function useHeartbeatSound(enabled = true) {
-  const enabledRef = useRef(enabled);
+export function useHeartbeatSound() {
   const [muted, setMuted] = useState(false);
-
-  enabledRef.current = enabled;
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
@@ -23,18 +20,22 @@ export function useHeartbeatSound(enabled = true) {
   }, []);
 
   const playBeat = useCallback((bpm: number) => {
-    if (
-      !enabledRef.current ||
-      mutedRef.current ||
-      !isHeartbeatAudioUnlocked() ||
-      isHeartbeatAudioStopped()
-    ) {
+    if (mutedRef.current || !isHeartbeatAudioUnlocked() || isHeartbeatAudioStopped()) {
       return;
     }
 
-    const session = getHeartbeatSession();
-    if (!session || session.ctx.state !== "running") return;
-    playHeartbeatBeat(session.ctx, session.master, bpm);
+    const current = getHeartbeatSession();
+    if (!current || current.ctx.state === "closed") return;
+
+    if (current.ctx.state === "suspended") {
+      void current.ctx.resume().then((ok) => {
+        if (!ok || isHeartbeatAudioStopped()) return;
+        playHeartbeatBeat(current.ctx, current.master, bpm);
+      });
+      return;
+    }
+
+    playHeartbeatBeat(current.ctx, current.master, bpm);
   }, []);
 
   const mute = useCallback(() => {
@@ -46,14 +47,6 @@ export function useHeartbeatSound(enabled = true) {
     setMuted(false);
     setHeartbeatMuted(false);
   }, []);
-
-  useEffect(() => {
-    if (!enabled) {
-      stopAll();
-      return;
-    }
-    return () => stopAll();
-  }, [enabled, stopAll]);
 
   return {
     muted,

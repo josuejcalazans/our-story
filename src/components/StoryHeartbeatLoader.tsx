@@ -55,16 +55,10 @@ export default function StoryHeartbeatLoader({
   const [heartScale, setHeartScale] = useState(1);
   const [rippleKey, setRippleKey] = useState(0);
 
-  const { muted, mute, unmute, playBeat, stopAll } = useHeartbeatSound(sound && running);
+  const { muted, mute, unmute, playBeat, stopAll } = useHeartbeatSound();
 
   const playBeatRef = useRef(playBeat);
   playBeatRef.current = playBeat;
-
-  useEffect(() => {
-    if (!running) stopAll();
-  }, [running, stopAll]);
-
-  useEffect(() => () => stopAll(), [stopAll]);
 
   useEffect(() => {
     if (elapsedMs < STORY_LOADER_MIN_MS || completedRef.current) return;
@@ -95,7 +89,7 @@ export default function StoryHeartbeatLoader({
       setHeartScale(scale);
       setTimeout(() => setHeartScale(1), 85);
 
-      if (cancelled || getElapsedMs() >= STORY_LOADER_MIN_MS) return;
+      if (cancelled || getElapsedMs() >= STORY_LOADER_MIN_MS || !sound) return;
       playBeatRef.current(bpm);
 
       if (cancelled) return;
@@ -108,7 +102,7 @@ export default function StoryHeartbeatLoader({
       cancelled = true;
       if (beatTimeout) clearTimeout(beatTimeout);
     };
-  }, [running, getElapsedMs]);
+  }, [running, getElapsedMs, sound]);
 
   return (
     <div

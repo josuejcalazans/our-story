@@ -1,19 +1,18 @@
 import {
-  primeSilentAudio,
+  resetPlaybackAudioSession,
   setPlaybackAudioSession,
-  stopSilentAudio,
 } from "@/lib/heartbeat-audio-unlock";
 import { createAudioContext, createHeartbeatBus } from "@/lib/heartbeat-sound";
 
 type Session = {
   ctx: AudioContext;
   master: GainNode;
+  compressor: DynamicsCompressorNode;
 };
 
 let session: Session | null = null;
 let stopped = true;
 let unlocked = false;
-let unlocking = false;
 
 export function isHeartbeatAudioStopped() {
   return stopped;
@@ -33,79 +32,78 @@ function ensureSession(): Session {
   if (session && session.ctx.state !== "closed") return session;
 
   const ctx = createAudioContext();
-  const { master } = createHeartbeatBus(ctx);
-  session = { ctx, master };
+  const { master, compressor } = createHeartbeatBus(ctx);
+  session = { ctx, master, compressor };
   return session;
 }
 
-/** Chamado no toque da tela "Preparando" — gesto do usuário (iOS) */
+/** No toque da tela Preparando — await resume para iOS */
 export async function unlockHeartbeatAudio(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (unlocked && session && session.ctx.state === "running") return true;
-  if (unlocking) return unlocked;
-  unlocking = true;
 
   try {
     setPlaybackAudioSession();
-    await primeSilentAudio();
-    stopSilentAudio();
-
-    if (stopped) stopped = false;
+    stopped = false;
 
     const { ctx, master } = ensureSession();
 
-    if (ctx.state !== "running") {
+    if (ctx.state === "suspended") {
       await ctx.resume();
     }
 
-    if (stopped) return false;
+    if (stopped || ctx.state !== "running") return false;
 
-    const buffer = ctx.createBuffer(1, 1, 22050);
+    const t = ctx.currentTime;
     const ping = ctx.createBufferSource();
-    ping.buffer = buffer;
+    ping.buffer = ctx.createBuffer(1, 1, 22050);
     ping.connect(master);
-    ping.start(0);
-    ping.stop(ctx.currentTime + 0.01);
+    ping.start(t);
+    ping.stop(t + 0.01);
 
-    master.gain.value = 0.5;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(0.5, t);
 
-    if (ctx.state === "running") {
-      unlocked = true;
-      return true;
-    }
+    unlocked = true;
+    return true;
   } catch {
-    /* Web Audio indisponível */
-  } finally {
-    unlocking = false;
+    return false;
   }
-
-  return false;
 }
 
 export function setHeartbeatMuted(muted: boolean) {
   const current = getHeartbeatSession();
   if (!current) return;
-  current.master.gain.value = muted ? 0 : 0.5;
+  const t = current.ctx.currentTime;
+  current.master.gain.cancelScheduledValues(t);
+  current.master.gain.setValueAtTime(muted ? 0 : 0.5, t);
 }
 
-/** Para imediatamente — ao sair do loader */
+/** Para ao terminar o loader — não chamar no remount do React */
 export function stopHeartbeatAudioSession() {
   stopped = true;
   unlocked = false;
-  unlocking = false;
-  stopSilentAudio();
+  resetPlaybackAudioSession();
 
   const current = session;
   session = null;
 
   if (!current || current.ctx.state === "closed") return;
 
+  const { ctx, master, compressor } = current;
+
   try {
-    current.master.gain.cancelScheduledValues(current.ctx.currentTime);
-    current.master.gain.setValueAtTime(0, current.ctx.currentTime);
+    const t = ctx.currentTime;
+    master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(0, t);
+    master.disconnect();
+    compressor.disconnect();
   } catch {
-    /* já fechado */
+    /* nó já desconectado */
   }
 
-  void current.ctx.close();
+  if (ctx.state === "running") {
+    void ctx.suspend();
+  }
+  void ctx.close();
 }

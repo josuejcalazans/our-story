@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import StoryPreparingScreen from "@/components/StoryPreparingScreen";
 import StoryHeartbeatLoader, { STORY_LOADER_MIN_MS } from "@/components/StoryHeartbeatLoader";
@@ -10,6 +10,8 @@ type Phase = "preparing" | "heart";
 
 export default function StoryIntroSequence({ onComplete }: { onComplete: () => void }) {
   const [phase, setPhase] = useState<Phase>("preparing");
+
+  useEffect(() => () => stopHeartbeatAudioSession(), []);
 
   const handleHeartComplete = () => {
     stopHeartbeatAudioSession();

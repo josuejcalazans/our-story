@@ -9,9 +9,7 @@ export default function StoryPreparingScreen({ onReady }: { onReady: () => void 
   const handleStart = () => {
     if (starting) return;
     setStarting(true);
-    void unlockHeartbeatAudio().finally(() => {
-      onReady();
-    });
+    void unlockHeartbeatAudio().finally(() => onReady());
   };
 
   return (

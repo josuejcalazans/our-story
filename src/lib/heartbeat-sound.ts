@@ -39,6 +39,7 @@ type ThumpOpts = { treble?: boolean };
  */
 export function playHeartbeatBeat(ctx: AudioContext, master: GainNode, bpm: number) {
   try {
+    if (ctx.state === "closed") return;
     if (ctx.state === "suspended") void ctx.resume();
     const t = ctx.currentTime;
     const cycleSec = 60 / bpm;
