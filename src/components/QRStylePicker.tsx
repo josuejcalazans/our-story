@@ -1,28 +1,30 @@
 
 import QRStyleIcon from "@/components/QRStyleIcon";
 import { Label } from "@/components/ui/label";
+import type { CornerDotType, CornerSquareType, DotType } from "@/lib/qr-styles";
 import { cn } from "@/lib/utils";
 
-type StyleOption<T extends string> = {
-  value: T;
-  label: string;
+type QRStyleByCategory = {
+  dot: DotType;
+  cornerSquare: CornerSquareType;
+  cornerDot: CornerDotType;
 };
 
-type QRStylePickerProps<T extends string> = {
+type QRStylePickerProps<C extends keyof QRStyleByCategory> = {
   title: string;
-  category: "dot" | "cornerSquare" | "cornerDot";
-  options: StyleOption<T>[];
-  value: T;
-  onChange: (value: T) => void;
+  category: C;
+  options: { value: QRStyleByCategory[C]; label: string }[];
+  value: QRStyleByCategory[C];
+  onChange: (value: QRStyleByCategory[C]) => void;
 };
 
-function QRStylePicker<T extends string>({
+function QRStylePicker<C extends keyof QRStyleByCategory>({
   title,
   category,
   options,
   value,
   onChange,
-}: QRStylePickerProps<T>) {
+}: QRStylePickerProps<C>) {
   return (
     <div className="space-y-2">
       <Label className="text-xs text-muted-foreground uppercase tracking-wider">
