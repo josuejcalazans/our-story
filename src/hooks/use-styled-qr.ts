@@ -21,13 +21,9 @@ export function useStyledQRCode(
 
     const config = buildQRStylingConfig(options);
 
-    if (!qrRef?.current) {
-      qrRef.current = new QRCodeStyling(config);
-      container.innerHTML = "";
-      qrRef.current.append(container);
-    } else {
-      qrRef.current.update(config);
-    }
+    container.innerHTML = "";
+    qrRef.current = new QRCodeStyling(config);
+    qrRef.current.append(container);
   }, [
     containerRef,
     options.data,

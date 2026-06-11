@@ -17,6 +17,9 @@ export type StyledQROptions = {
 };
 
 export function buildQRStylingConfig(options: StyledQROptions): Options {
+  const hasLogo = Boolean(options.logoUrl);
+  const logoSize = options.logoSize ?? 50;
+
   return {
     width: options.size,
     height: options.size,
@@ -41,14 +44,20 @@ export function buildQRStylingConfig(options: StyledQROptions): Options {
     backgroundOptions: {
       color: options.bgColor,
     },
-    image: options.logoUrl || undefined,
-    imageOptions: options.logoUrl
+    // Always set imageOptions (never undefined) so update() does not crash.
+    // imageSize must always be a number — omitting it becomes NaN inside qr-code-styling.
+    image: hasLogo ? options.logoUrl : undefined,
+    imageOptions: hasLogo
       ? {
           crossOrigin: "anonymous",
           margin: 4,
-          imageSize: (options.logoSize || 50) / options.size,
+          imageSize: logoSize / options.size,
           hideBackgroundDots: options.logoExcavate ?? true,
         }
-      : undefined,
+      : {
+          hideBackgroundDots: options.logoExcavate ?? true,
+          imageSize: 0.4,
+          margin: 0,
+        },
   };
 }
