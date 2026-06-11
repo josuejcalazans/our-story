@@ -51,6 +51,7 @@ import {
 } from "@/lib/use-site-content";
 import IconPicker from "@/components/IconPicker";
 import { formatAccessPassword } from "@/lib/page-gate";
+import { SEED_MEMORY_ENVELOPES, SEED_PLACES } from "@/lib/content-seeds";
 import { useQueryClient } from "@tanstack/react-query";
 import OurStory from "@/components/OurStory";
 import { motion, AnimatePresence } from "framer-motion";
@@ -112,7 +113,7 @@ type HistoryItem = {
   createdAt: number;
 };
 
-const ADMIN_TABS = ["timeline", "stats", "gallery", "letter", "share"] as const;
+const ADMIN_TABS = ["timeline", "stats", "places", "gallery", "memories", "letter", "share"] as const;
 
 const adminSearchSchema = z.object({
   tab: z.enum(ADMIN_TABS).optional().default("timeline"),
@@ -1632,11 +1633,25 @@ function SettingsEditor() {
   );
 }
 
+function DbSetupHint({ table }: { table: string }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-destructive/30 bg-destructive/5 p-5 text-sm text-muted-foreground">
+      <p className="font-medium text-foreground">Tabela não encontrada no banco</p>
+      <p className="mt-2">
+        Rode a migration <code className="text-xs">20260610000008_dynamic_content_and_gate.sql</code> no
+        Supabase, ou execute <code className="text-xs">supabase db push</code>.
+      </p>
+      <p className="mt-1 text-xs opacity-70">Tabela: {table}</p>
+    </div>
+  );
+}
+
 /* -------------------- Places -------------------- */
 function PlacesEditor() {
-  const { data, isLoading } = usePlaces();
+  const { data, isLoading, isError, error } = usePlaces();
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["places"] });
+  const [seeding, setSeeding] = useState(false);
 
   async function add() {
     const nextOrder = (data?.length ?? 0) + 1;
@@ -1651,12 +1666,46 @@ function PlacesEditor() {
     else refresh();
   }
 
+  async function seedDefaults() {
+    setSeeding(true);
+    const { error } = await supabase.from("places").insert([...SEED_PLACES]);
+    setSeeding(false);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Lugares de exemplo carregados");
+      refresh();
+    }
+  }
+
   if (isLoading) return <Loader />;
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <DbSetupHint table="places" />
+        <p className="text-xs text-muted-foreground">{error.message}</p>
+      </div>
+    );
+  }
+
+  const empty = (data ?? []).length === 0;
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Capítulo 04 — lugares especiais da história.
-      </p>
+      <div className="rounded-2xl bg-white/5 p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">Capítulo 04 — Nossos lugares</p>
+        <p className="mt-1">
+          Cards na página pública com lugares especiais (primeiro encontro, viagem, restaurante…).
+        </p>
+      </div>
+      {empty && (
+        <div className="glass rounded-2xl p-6 text-center">
+          <MapPin className="mx-auto h-8 w-8 text-muted-foreground/50" />
+          <p className="mt-3 text-sm text-muted-foreground">Nenhum lugar cadastrado ainda.</p>
+          <Button onClick={seedDefaults} disabled={seeding} className="mt-4 rounded-xl">
+            {seeding ? "Carregando..." : "Carregar exemplos"}
+          </Button>
+        </div>
+      )}
       {(data ?? []).map((p) => (
         <PlaceRow key={p.id} p={p} onChange={refresh} />
       ))}
@@ -1749,9 +1798,10 @@ function PlaceRow({ p, onChange }: { p: Place; onChange: () => void }) {
 
 /* -------------------- Memories -------------------- */
 function MemoriesEditor() {
-  const { data, isLoading } = useMemoryEnvelopes();
+  const { data, isLoading, isError, error } = useMemoryEnvelopes();
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["memory_envelopes"] });
+  const [seeding, setSeeding] = useState(false);
 
   async function add() {
     const nextOrder = (data?.length ?? 0) + 1;
@@ -1767,12 +1817,47 @@ function MemoriesEditor() {
     else refresh();
   }
 
+  async function seedDefaults() {
+    setSeeding(true);
+    const { error } = await supabase.from("memory_envelopes").insert([...SEED_MEMORY_ENVELOPES]);
+    setSeeding(false);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Envelopes de exemplo carregados");
+      refresh();
+    }
+  }
+
   if (isLoading) return <Loader />;
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <DbSetupHint table="memory_envelopes" />
+        <p className="text-xs text-muted-foreground">{error.message}</p>
+      </div>
+    );
+  }
+
+  const empty = (data ?? []).length === 0;
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Capítulo 08 — envelopes da caixa de memórias. O coração com ? no site é o easter egg fixo.
-      </p>
+      <div className="rounded-2xl bg-white/5 p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">Capítulo 08 — Caixa de memórias</p>
+        <p className="mt-1">
+          Envelopes que a pessoa toca para abrir mensagens curtas. O coração com <strong>?</strong> no
+          site é o easter egg fixo (5 toques).
+        </p>
+      </div>
+      {empty && (
+        <div className="glass rounded-2xl p-6 text-center">
+          <Mail className="mx-auto h-8 w-8 text-muted-foreground/50" />
+          <p className="mt-3 text-sm text-muted-foreground">Nenhum envelope cadastrado ainda.</p>
+          <Button onClick={seedDefaults} disabled={seeding} className="mt-4 rounded-xl">
+            {seeding ? "Carregando..." : "Carregar exemplos"}
+          </Button>
+        </div>
+      )}
       {(data ?? []).map((m) => (
         <MemoryRow key={m.id} m={m} onChange={refresh} />
       ))}
