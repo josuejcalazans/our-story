@@ -8,8 +8,8 @@ export const HEARTBEAT_ACCELERATE_AT_MS = 3000;
 export const HEARTBEAT_INITIAL_FLAT_MS = 120;
 
 /** Ritmo calmo nos primeiros 3s */
-export const HEARTBEAT_CYCLE_SLOW_MS = 880;
-/** Fim bem rápido — quase corrida */
+export const HEARTBEAT_CYCLE_SLOW_MS = 820;
+/** Fim em corrida — tutututu */
 export const HEARTBEAT_CYCLE_FAST_MS = 155;
 
 const LUB_IN_CYCLE = 0.12;
@@ -24,8 +24,9 @@ export function getHeartbeatCycleMs(elapsedMs: number): number {
 
   const rampMs = STORY_LOADER_MIN_MS - HEARTBEAT_ACCELERATE_AT_MS;
   const t = Math.min(1, (elapsedMs - HEARTBEAT_ACCELERATE_AT_MS) / rampMs);
-  // Explode no final da rampa (3s → 7s)
-  const eased = t * t * t * t * t;
+
+  // Cai rápido logo aos 3s e termina em corrida (evita t^5 que travava lento)
+  const eased = t ** 0.65;
 
   return Math.round(
     HEARTBEAT_CYCLE_SLOW_MS -
@@ -33,11 +34,21 @@ export function getHeartbeatCycleMs(elapsedMs: number): number {
   );
 }
 
-/** Posição horizontal na linha = tempo (0 → 1) */
+/** Revelação da linha: devagar até 3s, depois corre */
 export function getEcgDrawProgress(elapsedMs: number): number {
   if (elapsedMs >= STORY_LOADER_MIN_MS) return 1;
   if (elapsedMs <= 0) return 0;
-  return elapsedMs / STORY_LOADER_MIN_MS;
+
+  const slowShare = 0.14;
+
+  if (elapsedMs < HEARTBEAT_ACCELERATE_AT_MS) {
+    return slowShare * (elapsedMs / HEARTBEAT_ACCELERATE_AT_MS);
+  }
+
+  const t =
+    (elapsedMs - HEARTBEAT_ACCELERATE_AT_MS) /
+    (STORY_LOADER_MIN_MS - HEARTBEAT_ACCELERATE_AT_MS);
+  return slowShare + (1 - slowShare) * t ** 0.7;
 }
 
 export function timeToPathX(ms: number, pathWidth: number): number {
@@ -132,7 +143,8 @@ export function getHeartScale(elapsedMs: number, schedule: BeatPulse[]): number 
 
   for (const pulse of schedule) {
     const dt = elapsedMs - pulse.atMs;
-    const window = pulse.kind === "lub" ? 300 : 220;
+    const fast = pulse.atMs >= HEARTBEAT_ACCELERATE_AT_MS;
+    const window = pulse.kind === "lub" ? (fast ? 140 : 300) : fast ? 100 : 220;
     const peak = pulse.kind === "lub" ? 0.28 : 0.12;
     if (dt < 0 || dt > window) continue;
     const x = dt / window;

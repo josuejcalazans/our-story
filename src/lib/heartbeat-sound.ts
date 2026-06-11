@@ -1,6 +1,7 @@
 import {
   buildBeatSchedule,
   getLubDubOffsetsSec,
+  HEARTBEAT_ACCELERATE_AT_MS,
 } from "@/lib/heartbeat-loader-timing";
 
 export {
@@ -83,10 +84,11 @@ export function scheduleLoaderHeartbeat(
     const delayMs = pulse.atMs - elapsed;
     if (delayMs < -80) continue;
 
+    const fast = pulse.atMs >= HEARTBEAT_ACCELERATE_AT_MS;
     const spec =
       pulse.kind === "lub"
-        ? { hz: 62, gain: 0.32, decay: 0.2 }
-        : { hz: 48, gain: 0.14, decay: 0.16 };
+        ? { hz: 62, gain: fast ? 0.28 : 0.32, decay: fast ? 0.09 : 0.2 }
+        : { hz: 48, gain: fast ? 0.12 : 0.14, decay: fast ? 0.07 : 0.16 };
 
     const id = window.setTimeout(
       () => {
