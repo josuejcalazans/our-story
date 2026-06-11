@@ -1,3 +1,6 @@
+import { LUB_DUB_GAP_MS } from "@/lib/heartbeat-loader-timing";
+import { playHeartbeatSampleLayer } from "@/lib/heartbeat-sample";
+
 export {
   STORY_LOADER_MIN_MS,
   HEARTBEAT_ACCELERATE_AT_MS,
@@ -13,17 +16,16 @@ export function createAudioContext(): AudioContext {
   return new Ctor();
 }
 
-/** Master + compressor para evitar saturação no tutututu final */
 export function createHeartbeatBus(ctx: AudioContext) {
   const master = ctx.createGain();
   const compressor = ctx.createDynamicsCompressor();
 
   master.gain.value = 0.5;
-  compressor.threshold.setValueAtTime(-20, 0);
-  compressor.knee.setValueAtTime(10, 0);
-  compressor.ratio.setValueAtTime(6, 0);
-  compressor.attack.setValueAtTime(0.002, 0);
-  compressor.release.setValueAtTime(0.14, 0);
+  compressor.threshold.setValueAtTime(-22, 0);
+  compressor.knee.setValueAtTime(12, 0);
+  compressor.ratio.setValueAtTime(5, 0);
+  compressor.attack.setValueAtTime(0.003, 0);
+  compressor.release.setValueAtTime(0.18, 0);
 
   master.connect(compressor);
   compressor.connect(ctx.destination);
@@ -31,75 +33,124 @@ export function createHeartbeatBus(ctx: AudioContext) {
   return { master, compressor };
 }
 
-type ThumpOpts = { treble?: boolean };
+type BeatOpts = { cinematic?: boolean };
 
-/**
- * Batimento lub-dub — padrão simplifica conforme acelera
- * para caber dentro do ciclo sem empilhar graves.
- */
-export function playHeartbeatBeat(ctx: AudioContext, master: GainNode, bpm: number) {
+function thump(
+  ctx: AudioContext,
+  master: GainNode,
+  st: number,
+  hz: number,
+  vol: number,
+  dur: number,
+) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(hz < 55 ? 175 : 210, st);
+  filter.Q.setValueAtTime(0.7, st);
+
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(hz, st);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(28, hz * 0.5), st + dur);
+
+  gain.gain.setValueAtTime(0, st);
+  gain.gain.linearRampToValueAtTime(vol, st + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, st + dur);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(master);
+  osc.start(st);
+  osc.stop(st + dur + 0.02);
+}
+
+/** Lub-dub cinematográfico: grave encorpado + dub suave */
+export function playCinematicHeartbeatBeat(ctx: AudioContext, master: GainNode, bpm: number) {
+  try {
+    if (ctx.state === "closed") return;
+    if (ctx.state === "suspended") void ctx.resume();
+
+    const t = ctx.currentTime;
+    const dubAt = t + LUB_DUB_GAP_MS / 1000;
+
+    // LUB — forte, encorpado (62 Hz + corpo em 40 Hz)
+    thump(ctx, master, t, 62, 0.32, 0.13);
+    thump(ctx, master, t, 40, 0.11, 0.11);
+
+    // DUB — mais suave e curto (48 Hz)
+    thump(ctx, master, dubAt, 48, 0.14, 0.075);
+
+    playHeartbeatSampleLayer(ctx, master, bpm, t);
+  } catch {
+    /* Web Audio indisponível */
+  }
+}
+
+/** Loader simples — mantém aceleração progressiva */
+export function playHeartbeatBeat(
+  ctx: AudioContext,
+  master: GainNode,
+  bpm: number,
+  opts: BeatOpts = {},
+) {
+  if (opts.cinematic || bpm <= 120) {
+    playCinematicHeartbeatBeat(ctx, master, bpm);
+    return;
+  }
+
   try {
     if (ctx.state === "closed") return;
     if (ctx.state === "suspended") void ctx.resume();
     const t = ctx.currentTime;
-    const cycleSec = 60 / bpm;
-    const sprint = bpm > 260;
-    const rush = bpm > 165;
+    const dubAt = t + LUB_DUB_GAP_MS / 1000;
+    const vol = Math.min(0.28, 0.18 + bpm / 1200);
 
-    function thump(st: number, freq: number, vol: number, dur: number, opts: ThumpOpts = {}) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const filter = ctx.createBiquadFilter();
-
-      filter.type = opts.treble ? "highpass" : "lowpass";
-      filter.frequency.setValueAtTime(opts.treble ? 90 : rush ? 115 : 185, st);
-      filter.Q.setValueAtTime(0.5, st);
-
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(master);
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, st);
-      osc.frequency.exponentialRampToValueAtTime(
-        Math.max(opts.treble ? 55 : 30, freq * (sprint ? 0.65 : rush ? 0.52 : 0.32)),
-        st + dur,
-      );
-      gain.gain.setValueAtTime(0, st);
-      gain.gain.linearRampToValueAtTime(vol, st + 0.006);
-      gain.gain.exponentialRampToValueAtTime(0.0001, st + dur);
-      osc.start(st);
-      osc.stop(st + dur + 0.015);
-    }
-
-    const v = sprint
-      ? Math.max(0.02, 0.07 - (bpm - 260) / 1800)
-      : rush
-        ? Math.max(0.06, 0.18 - (bpm - 165) / 1000)
-        : Math.min(0.3, 0.2 + bpm / 1000);
-
-    const maxDur = cycleSec * (sprint ? 0.28 : rush ? 0.38 : 0.52);
-
-    if (sprint) {
-      thump(t, 82, v, Math.min(0.028, maxDur), { treble: true });
-      return;
-    }
-
-    if (rush) {
-      const dubGap = Math.min(0.028, cycleSec * 0.2);
-      thump(t, 66, v, Math.min(0.038, maxDur));
-      thump(t + dubGap, 58, v * 0.55, Math.min(0.032, maxDur));
-      return;
-    }
-
-    const lubDecay = Math.min(0.1, maxDur * 0.55);
-    const dubDecay = Math.min(0.08, maxDur * 0.45);
-    const dubGap = Math.max(0.032, cycleSec * 0.24);
-
-    thump(t, 55, v, lubDecay);
-    thump(t, 40, v * 0.5, lubDecay + 0.012);
-    thump(t + dubGap, 50, v * 0.65, dubDecay);
-    thump(t + dubGap, 36, v * 0.4, dubDecay + 0.01);
+    thump(ctx, master, t, 62, vol, 0.11);
+    thump(ctx, master, dubAt, 48, vol * 0.45, 0.07);
   } catch {
     /* Web Audio indisponível */
   }
+}
+
+/** Respiração suave (~5% vol) — sensação de vida */
+export function createBreathingLayer(ctx: AudioContext, master: GainNode) {
+  const seconds = 4;
+  const length = Math.floor(ctx.sampleRate * seconds);
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  let last = 0;
+  for (let i = 0; i < length; i++) {
+    const white = Math.random() * 2 - 1;
+    last = (last + 0.018 * white) / 1.018;
+    const breath = Math.sin((i / ctx.sampleRate) * Math.PI * 0.45);
+    data[i] = last * 0.6 * (0.35 + 0.65 * Math.max(0, breath));
+  }
+
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  src.loop = true;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 280;
+  filter.Q.value = 0.4;
+
+  const gain = ctx.createGain();
+  gain.gain.value = 0.05;
+
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(master);
+  src.start();
+
+  return () => {
+    try {
+      src.stop();
+    } catch {
+      /* já parado */
+    }
+  };
 }
