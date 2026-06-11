@@ -1,16 +1,16 @@
 /** Tempo mínimo do loader antes de mostrar senha ou história */
 export const STORY_LOADER_MIN_MS = 7000;
 
-/** A partir daqui a linha e os batimentos aceleram */
-export const HEARTBEAT_ACCELERATE_AT_MS = 3000;
+/** A partir dos 4s entra o tutututu acelerado */
+export const HEARTBEAT_ACCELERATE_AT_MS = 4000;
 
-/** Baseline plana antes do primeiro pico (como no monitor) */
+/** Baseline plana antes do primeiro pico */
 export const HEARTBEAT_INITIAL_FLAT_MS = 120;
 
-/** ~115 bpm em repouso */
-export const HEARTBEAT_CYCLE_SLOW_MS = 1050;
-/** ~150 bpm no fim da aceleração */
-export const HEARTBEAT_CYCLE_FAST_MS = 400;
+/** Ritmo calmo nos primeiros 4s */
+export const HEARTBEAT_CYCLE_SLOW_MS = 880;
+/** Fim bem rápido — quase corrida */
+export const HEARTBEAT_CYCLE_FAST_MS = 155;
 
 const LUB_IN_CYCLE = 0.12;
 const DUB_IN_CYCLE = 0.34;
@@ -24,7 +24,8 @@ export function getHeartbeatCycleMs(elapsedMs: number): number {
 
   const rampMs = STORY_LOADER_MIN_MS - HEARTBEAT_ACCELERATE_AT_MS;
   const t = Math.min(1, (elapsedMs - HEARTBEAT_ACCELERATE_AT_MS) / rampMs);
-  const eased = t * t * t;
+  // Explode no final dos 3s de rampa (4s → 7s)
+  const eased = t * t * t * t * t;
 
   return Math.round(
     HEARTBEAT_CYCLE_SLOW_MS -
