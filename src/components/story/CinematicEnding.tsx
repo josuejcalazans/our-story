@@ -86,7 +86,7 @@ function ChaptersLine({ text, onRevealed }: { text: string; onRevealed: () => vo
     <motion.p
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="font-letter text-2xl italic leading-relaxed text-foreground sm:text-3xl"
+      className="mx-auto max-w-xl text-center font-letter text-2xl italic leading-relaxed text-foreground sm:text-3xl"
     >
       {words.map((word, i) => (
         <motion.span
@@ -115,7 +115,7 @@ function FutureLine({ text }: { text: string }) {
     <motion.p
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="font-letter text-2xl italic leading-relaxed text-foreground sm:text-3xl"
+      className="mx-auto max-w-xl text-center font-letter text-2xl italic leading-relaxed text-foreground sm:text-3xl"
     >
       {words.map((word, i) => (
         <motion.span
@@ -150,48 +150,53 @@ function LoveLine({ text }: { text: string }) {
   const chars = [...text];
 
   return (
-    <motion.p
-      className="font-display text-4xl leading-tight sm:text-5xl md:text-6xl"
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
+      className="flex items-center justify-center gap-3 sm:gap-4"
     >
-      {chars.map((char, i) => (
-        <motion.span
-          key={`${char}-${i}`}
-          initial={{ opacity: 0, scale: 0.4, filter: "blur(16px)" }}
-          animate={{
-            opacity: 1,
-            scale: 1,
-            filter: "blur(0px)",
-            textShadow: [
-              "0 0 0px oklch(0.74 0.21 350 / 0)",
-              "0 0 28px oklch(0.74 0.21 350 / 0.55)",
-              "0 0 12px oklch(0.74 0.21 350 / 0.35)",
-            ],
-          }}
-          transition={{
-            delay: 0.2 + i * 0.09,
-            duration: 0.7,
-            ease: [0.34, 1.4, 0.64, 1],
-          }}
-          className="romantic-gradient-text inline-block"
-          style={{ width: char === " " ? "0.35em" : undefined }}
-        >
-          {char === " " ? "\u00A0" : char}
-        </motion.span>
-      ))}
+      <span
+        aria-label={text}
+        className="flex items-center justify-center font-display text-4xl leading-none sm:text-5xl md:text-6xl"
+      >
+        {chars.map((char, i) => (
+          <motion.span
+            key={`${char}-${i}`}
+            initial={{ opacity: 0, scale: 0.4, filter: "blur(16px)" }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              filter: "blur(0px)",
+              textShadow: [
+                "0 0 0px oklch(0.74 0.21 350 / 0)",
+                "0 0 28px oklch(0.74 0.21 350 / 0.55)",
+                "0 0 12px oklch(0.74 0.21 350 / 0.35)",
+              ],
+            }}
+            transition={{
+              delay: 0.2 + i * 0.09,
+              duration: 0.7,
+              ease: [0.34, 1.4, 0.64, 1],
+            }}
+            className="romantic-gradient-text inline-block"
+            style={{ width: char === " " ? "0.35em" : undefined }}
+          >
+            {char === " " ? "\u00A0" : char}
+          </motion.span>
+        ))}
+      </span>
       <motion.span
         initial={{ opacity: 0, scale: 0 }}
         animate={{ opacity: 1, scale: [0, 1.25, 1] }}
         transition={{ delay: 0.2 + chars.length * 0.09 + 0.15, duration: 0.6 }}
-        className="ml-2 inline-block align-middle"
+        className="flex shrink-0 items-center justify-center"
       >
         <Heart
           aria-hidden
-          className="inline-block h-[0.85em] w-[0.85em] fill-accent text-accent drop-shadow-[0_0_24px_rgba(236,72,153,0.65)]"
+          className="h-9 w-9 fill-accent text-accent drop-shadow-[0_0_24px_rgba(236,72,153,0.65)] sm:h-11 sm:w-11 md:h-12 md:w-12"
         />
       </motion.span>
-    </motion.p>
+    </motion.div>
   );
 }
 
@@ -211,7 +216,7 @@ function EndingLine({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0, y: -20, filter: "blur(10px)", scale: 0.98 }}
       transition={{ duration: 0.65, ease: "easeInOut" }}
-      className="absolute inset-x-0 top-1/2 -translate-y-1/2 px-2"
+      className="flex w-full items-center justify-center px-4 text-center"
     >
       {index === 0 && <ChaptersLine text={text} onRevealed={onFirstLineRevealed} />}
       {index === 1 && <FutureLine text={text} />}
@@ -271,7 +276,7 @@ export default function CinematicEnding({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.9 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-[#070014]/96 px-6 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-[#070014]/96 px-6 backdrop-blur-md"
         >
           <CinematicGlow />
           <RisingParticles />
@@ -292,7 +297,7 @@ export default function CinematicEnding({
             style={{ transformOrigin: "bottom" }}
           />
 
-          <div className="relative z-30 mx-auto h-[40vh] w-full max-w-2xl">
+          <div className="relative z-30 flex w-full max-w-3xl flex-1 items-center justify-center px-4">
             <AnimatePresence mode="wait">
               {curtainOpen && (
                 <EndingLine index={line} onFirstLineRevealed={handleFirstLineRevealed} />
@@ -310,7 +315,7 @@ export default function CinematicEnding({
                 stopEndingSurpriseAudio();
                 onRestart();
               }}
-              className="absolute bottom-[12vh] z-30 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-8 py-4 text-sm font-medium text-accent shadow-glow transition-all hover:bg-accent/25 cursor-pointer"
+              className="absolute bottom-[12vh] left-1/2 z-30 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-8 py-4 text-sm font-medium text-accent shadow-glow transition-all hover:bg-accent/25 cursor-pointer"
             >
               <Heart className="h-4 w-4 fill-current" />
               Recomeçar nossa história
