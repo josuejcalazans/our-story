@@ -14,49 +14,53 @@ export function createAudioContext(): AudioContext {
 }
 
 /**
- * Batimento lub-dub — mesma fórmula do demo que funciona no Safari/iOS.
- * Chamado a cada ciclo via setTimeout (não pré-agendado).
+ * Batimento lub-dub — chamado a cada ciclo via setTimeout.
+ * Volume e decay encurtam quando acelera para não empilhar graves.
  */
 export function playHeartbeatBeat(ctx: AudioContext, master: GainNode, bpm: number) {
   try {
     if (ctx.state === "suspended") void ctx.resume();
     const t = ctx.currentTime;
+    const fast = bpm > 110;
 
     function thump(st: number, freq: number, vol: number, dur: number) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain);
+      const filter = ctx.createBiquadFilter();
+
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(fast ? 130 : 190, st);
+      filter.Q.setValueAtTime(0.6, st);
+
+      osc.connect(filter);
+      filter.connect(gain);
       gain.connect(master);
       osc.type = "sine";
       osc.frequency.setValueAtTime(freq, st);
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.3, st + dur);
+      osc.frequency.exponentialRampToValueAtTime(
+        Math.max(28, freq * (fast ? 0.5 : 0.32)),
+        st + dur,
+      );
       gain.gain.setValueAtTime(0, st);
-      gain.gain.linearRampToValueAtTime(vol, st + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, st + dur);
+      gain.gain.linearRampToValueAtTime(vol, st + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, st + dur);
       osc.start(st);
       osc.stop(st + dur + 0.02);
     }
 
-    const v = Math.min(0.5, 0.3 + bpm / 600);
-    thump(t, 55, v * 1.1, 0.12);
-    thump(t, 38, v * 0.8, 0.15);
-    const d = Math.max(0.05, (60 / bpm) * 0.28);
-    thump(t + d, 50, v, 0.1);
-    thump(t + d, 35, v * 0.7, 0.12);
+    // Calmo sobe um pouco; acelerado desce — evita clipping com batimentos sobrepostos
+    const v = fast
+      ? Math.max(0.12, 0.3 - (bpm - 110) / 850)
+      : Math.min(0.34, 0.24 + bpm / 900);
 
-    if (bpm > 120) {
-      const rumble = ctx.createOscillator();
-      const rumbleGain = ctx.createGain();
-      rumble.connect(rumbleGain);
-      rumbleGain.connect(master);
-      rumble.type = "sawtooth";
-      rumble.frequency.setValueAtTime(30, t);
-      rumble.frequency.linearRampToValueAtTime(24, t + 0.3);
-      rumbleGain.gain.setValueAtTime(0.04, t);
-      rumbleGain.gain.linearRampToValueAtTime(0, t + 0.3);
-      rumble.start(t);
-      rumble.stop(t + 0.35);
-    }
+    const lubDecay = fast ? Math.min(0.07, 45 / bpm) : 0.11;
+    const dubDecay = fast ? Math.min(0.06, 38 / bpm) : 0.09;
+    const dubGap = Math.max(0.035, (60 / bpm) * 0.26);
+
+    thump(t, fast ? 62 : 55, v, lubDecay);
+    thump(t, fast ? 50 : 40, v * 0.55, lubDecay + 0.015);
+    thump(t + dubGap, fast ? 58 : 50, v * 0.7, dubDecay);
+    thump(t + dubGap, fast ? 46 : 36, v * 0.45, dubDecay + 0.01);
   } catch {
     /* Web Audio indisponível */
   }

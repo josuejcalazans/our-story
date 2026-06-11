@@ -16,7 +16,7 @@ export function useHeartbeatSound(enabled = true) {
     if (!ctxRef.current || ctxRef.current.state === "closed") {
       const ctx = createAudioContext();
       const master = ctx.createGain();
-      master.gain.value = 0.72;
+      master.gain.value = 0.58;
       master.connect(ctx.destination);
       ctxRef.current = ctx;
       masterRef.current = master;
@@ -53,7 +53,7 @@ export function useHeartbeatSound(enabled = true) {
       ping.connect(ctx.destination);
       ping.start();
 
-      master.gain.value = 0.72;
+      master.gain.value = 0.58;
       unlockedRef.current = true;
       setUnlocked(true);
     } catch {
