@@ -31,6 +31,8 @@ import {
   Shield,
   Image,
   Link,
+  MapPin,
+  Mail,
 } from "lucide-react";
 import { useAuth } from "@/lib/use-auth";
 import {
@@ -38,11 +40,17 @@ import {
   useStats,
   useSettings,
   useGallery,
+  usePlaces,
+  useMemoryEnvelopes,
   type TimelineEvent,
   type Stat,
   type SiteSettings,
   type GalleryImage,
+  type Place,
+  type MemoryEnvelope,
 } from "@/lib/use-site-content";
+import IconPicker from "@/components/IconPicker";
+import { formatAccessPassword } from "@/lib/page-gate";
 import { useQueryClient } from "@tanstack/react-query";
 import OurStory from "@/components/OurStory";
 import { motion, AnimatePresence } from "framer-motion";
@@ -217,20 +225,26 @@ function AdminPage() {
           }}
           className="w-full"
         >
-          <TabsList className="grid w-full grid-cols-5 rounded-xl bg-white/5 p-1">
-            <TabsTrigger value="timeline" className="rounded-lg">
+          <TabsList className="flex h-auto w-full flex-wrap gap-1 rounded-xl bg-white/5 p-1">
+            <TabsTrigger value="timeline" className="rounded-lg text-xs sm:text-sm">
               Timeline
             </TabsTrigger>
-            <TabsTrigger value="stats" className="rounded-lg">
+            <TabsTrigger value="stats" className="rounded-lg text-xs sm:text-sm">
               Estatísticas
             </TabsTrigger>
-            <TabsTrigger value="gallery" className="rounded-lg">
+            <TabsTrigger value="places" className="rounded-lg text-xs sm:text-sm">
+              Lugares
+            </TabsTrigger>
+            <TabsTrigger value="gallery" className="rounded-lg text-xs sm:text-sm">
               Galeria
             </TabsTrigger>
-            <TabsTrigger value="letter" className="rounded-lg">
+            <TabsTrigger value="memories" className="rounded-lg text-xs sm:text-sm">
+              Memórias
+            </TabsTrigger>
+            <TabsTrigger value="letter" className="rounded-lg text-xs sm:text-sm">
               Configurações
             </TabsTrigger>
-            <TabsTrigger value="share" className="rounded-lg">
+            <TabsTrigger value="share" className="rounded-lg text-xs sm:text-sm">
               Compartilhar
             </TabsTrigger>
           </TabsList>
@@ -240,8 +254,14 @@ function AdminPage() {
           <TabsContent value="stats" className="mt-6">
             <StatsEditor />
           </TabsContent>
+          <TabsContent value="places" className="mt-6">
+            <PlacesEditor />
+          </TabsContent>
           <TabsContent value="gallery" className="mt-6">
             <GalleryEditor />
+          </TabsContent>
+          <TabsContent value="memories" className="mt-6">
+            <MemoriesEditor />
           </TabsContent>
           <TabsContent value="letter" className="mt-6">
             <SettingsEditor />
@@ -1179,6 +1199,7 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
         sort_order: form.sort_order,
         image_url: form.image_url,
         video_url: form.video_url,
+        icon_name: form.icon_name,
       })
       .eq("id", ev.id);
     if (error) toast.error(error.message);
@@ -1245,6 +1266,16 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
         />
       </div>
 
+      <div className="space-y-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+          Ícone
+        </span>
+        <IconPicker
+          value={form.icon_name ?? "Sparkles"}
+          onChange={(icon_name) => setForm({ ...form, icon_name })}
+        />
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <MediaUpload
           type="image"
@@ -1294,9 +1325,13 @@ function StatsEditor() {
 
   async function add() {
     const nextOrder = (data?.length ?? 0) + 1;
-    const { error } = await supabase
-      .from("stats")
-      .insert({ icon: "✨", label: "novo", value: "0", sort_order: nextOrder });
+    const { error } = await supabase.from("stats").insert({
+      icon: "✨",
+      icon_name: "Sparkles",
+      label: "novo",
+      value: "0",
+      sort_order: nextOrder,
+    });
     if (error) toast.error(error.message);
     else refresh();
   }
@@ -1321,6 +1356,7 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
       .from("stats")
       .update({
         icon: form.icon,
+        icon_name: form.icon_name,
         label: form.label,
         value: form.value,
         sort_order: form.sort_order,
@@ -1339,42 +1375,48 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
     else onChange();
   }
   return (
-    <div className="glass grid items-center gap-4 rounded-2xl p-4 sm:grid-cols-[80px_1fr_1fr_80px_auto]">
-      <Input
-        value={form.icon}
-        onChange={(e) => setForm({ ...form, icon: e.target.value })}
-        className="bg-white/5 rounded-xl border-white/5"
-      />
-      <Input
-        placeholder="Rótulo"
-        value={form.label}
-        onChange={(e) => setForm({ ...form, label: e.target.value })}
-        className="bg-white/5 rounded-xl border-white/5"
-      />
-      <Input
-        placeholder="Valor"
-        value={form.value}
-        onChange={(e) => setForm({ ...form, value: e.target.value })}
-        className="bg-white/5 rounded-xl border-white/5"
-      />
-      <Input
-        type="number"
-        value={form.sort_order}
-        onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
-        className="bg-white/5 rounded-xl border-white/5"
-      />
-      <div className="flex gap-2">
-        <Button size="sm" onClick={save} className="rounded-lg">
-          <Save className="h-4 w-4" />
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={remove}
-          className="text-muted-foreground hover:text-destructive rounded-lg"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+    <div className="glass space-y-4 rounded-2xl p-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Input
+          placeholder="Rótulo"
+          value={form.label}
+          onChange={(e) => setForm({ ...form, label: e.target.value })}
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+        <Input
+          placeholder="Valor (ex: incontáveis)"
+          value={form.value}
+          onChange={(e) => setForm({ ...form, value: e.target.value })}
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+        <Input
+          type="number"
+          value={form.sort_order}
+          onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+        <div className="flex gap-2 sm:justify-end">
+          <Button size="sm" onClick={save} className="rounded-lg">
+            <Save className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={remove}
+            className="text-muted-foreground hover:text-destructive rounded-lg"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+          Ícone
+        </span>
+        <IconPicker
+          value={form.icon_name ?? "Sparkles"}
+          onChange={(icon_name) => setForm({ ...form, icon_name })}
+        />
       </div>
     </div>
   );
@@ -1406,6 +1448,8 @@ function SettingsEditor() {
         secret_message: form.secret_message,
         hidden_video_url: form.hidden_video_url,
         theme_mode: form.theme_mode,
+        page_gate_enabled: form.page_gate_enabled,
+        access_date: form.access_date,
       })
       .eq("id", 1);
     if (error) toast.error(error.message);
@@ -1416,8 +1460,56 @@ function SettingsEditor() {
     setSaving(false);
   }
 
+  const gateDate = form.access_date ?? form.relationship_start.slice(0, 10);
+  const gatePassword = formatAccessPassword(gateDate);
+
   return (
     <div className="glass space-y-6 rounded-2xl p-6">
+      <div className="space-y-4 border-b border-white/5 pb-6">
+        <div className="space-y-1">
+          <h3 className="flex items-center gap-2 font-display text-xl">
+            <Shield className="h-5 w-5 text-accent" /> Proteção da página
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Quem não souber a data especial não consegue ver a história.
+          </p>
+        </div>
+        <div className="flex flex-col gap-4 rounded-xl bg-white/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Label htmlFor="page-gate">Exigir senha para entrar</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              A senha é a data no formato <span className="font-mono">DDMMYYYY</span>
+            </p>
+          </div>
+          <Switch
+            id="page-gate"
+            checked={form.page_gate_enabled}
+            onCheckedChange={(page_gate_enabled) => setForm({ ...form, page_gate_enabled })}
+          />
+        </div>
+        {form.page_gate_enabled && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="access-date" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+                Nosso dia (data da senha)
+              </label>
+              <Input
+                id="access-date"
+                type="date"
+                value={gateDate}
+                onChange={(e) => setForm({ ...form, access_date: e.target.value || null })}
+                className="bg-white/5 rounded-xl border-white/5"
+              />
+            </div>
+            <div className="flex flex-col justify-end rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Senha gerada</p>
+              <p className="mt-1 font-mono text-lg text-primary">{gatePassword || "—"}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Compartilhe só com quem deve entrar.</p>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 border-b border-white/5 pb-6">
         <div className="flex-1 space-y-1">
           <h3 className="flex items-center gap-2 font-display text-xl">
@@ -1536,6 +1628,254 @@ function SettingsEditor() {
         <Save className="h-4 w-4" />{" "}
         {saving ? "Salvando alterações..." : "Salvar todas as configurações"}
       </Button>
+    </div>
+  );
+}
+
+/* -------------------- Places -------------------- */
+function PlacesEditor() {
+  const { data, isLoading } = usePlaces();
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ["places"] });
+
+  async function add() {
+    const nextOrder = (data?.length ?? 0) + 1;
+    const { error } = await supabase.from("places").insert({
+      icon: "📍",
+      icon_name: "MapPin",
+      title: "Novo lugar",
+      subtitle: "Descrição curta",
+      sort_order: nextOrder,
+    });
+    if (error) toast.error(error.message);
+    else refresh();
+  }
+
+  if (isLoading) return <Loader />;
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Capítulo 04 — lugares especiais da história.
+      </p>
+      {(data ?? []).map((p) => (
+        <PlaceRow key={p.id} p={p} onChange={refresh} />
+      ))}
+      <Button onClick={add} variant="outline" className="w-full border-dashed rounded-xl py-8">
+        <Plus className="h-4 w-4" /> <MapPin className="h-4 w-4" /> Adicionar lugar
+      </Button>
+    </div>
+  );
+}
+
+function PlaceRow({ p, onChange }: { p: Place; onChange: () => void }) {
+  const [form, setForm] = useState(p);
+
+  async function save() {
+    const { error } = await supabase
+      .from("places")
+      .update({
+        icon_name: form.icon_name,
+        title: form.title,
+        subtitle: form.subtitle,
+        sort_order: form.sort_order,
+      })
+      .eq("id", p.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Salvo");
+      onChange();
+    }
+  }
+
+  async function remove() {
+    if (!confirm("Remover este lugar?")) return;
+    const { error } = await supabase.from("places").delete().eq("id", p.id);
+    if (error) toast.error(error.message);
+    else onChange();
+  }
+
+  return (
+    <div className="glass space-y-4 rounded-2xl p-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Input
+          placeholder="Título"
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+        <Input
+          placeholder="Subtítulo"
+          value={form.subtitle}
+          onChange={(e) => setForm({ ...form, subtitle: e.target.value })}
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+      </div>
+      <div className="space-y-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+          Ícone
+        </span>
+        <IconPicker
+          value={form.icon_name ?? "MapPin"}
+          onChange={(icon_name) => setForm({ ...form, icon_name })}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] uppercase text-muted-foreground">Ordem:</span>
+          <Input
+            type="number"
+            value={form.sort_order}
+            onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
+            className="w-16 bg-white/5 rounded-lg border-white/5"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={save} className="rounded-lg">
+            <Save className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={remove}
+            className="text-muted-foreground hover:text-destructive rounded-lg"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------- Memories -------------------- */
+function MemoriesEditor() {
+  const { data, isLoading } = useMemoryEnvelopes();
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ["memory_envelopes"] });
+
+  async function add() {
+    const nextOrder = (data?.length ?? 0) + 1;
+    const { error } = await supabase.from("memory_envelopes").insert({
+      icon: "💌",
+      icon_name: "Mail",
+      title: "Novo envelope",
+      message: "Sua mensagem especial aqui...",
+      is_easter_egg: false,
+      sort_order: nextOrder,
+    });
+    if (error) toast.error(error.message);
+    else refresh();
+  }
+
+  if (isLoading) return <Loader />;
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Capítulo 08 — envelopes da caixa de memórias. O coração com ? no site é o easter egg fixo.
+      </p>
+      {(data ?? []).map((m) => (
+        <MemoryRow key={m.id} m={m} onChange={refresh} />
+      ))}
+      <Button onClick={add} variant="outline" className="w-full border-dashed rounded-xl py-8">
+        <Plus className="h-4 w-4" /> <Mail className="h-4 w-4" /> Adicionar envelope
+      </Button>
+    </div>
+  );
+}
+
+function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void }) {
+  const [form, setForm] = useState(m);
+
+  async function save() {
+    const { error } = await supabase
+      .from("memory_envelopes")
+      .update({
+        icon_name: form.icon_name,
+        title: form.title,
+        message: form.message,
+        is_easter_egg: form.is_easter_egg,
+        sort_order: form.sort_order,
+      })
+      .eq("id", m.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Salvo");
+      onChange();
+    }
+  }
+
+  async function remove() {
+    if (!confirm("Remover este envelope?")) return;
+    const { error } = await supabase.from("memory_envelopes").delete().eq("id", m.id);
+    if (error) toast.error(error.message);
+    else onChange();
+  }
+
+  return (
+    <div
+      className={`glass space-y-4 rounded-2xl p-4 ${form.is_easter_egg ? "ring-1 ring-accent/40" : ""}`}
+    >
+      {form.is_easter_egg && (
+        <p className="flex items-center gap-2 text-xs text-accent">
+          <Heart className="h-3.5 w-3.5 fill-accent" /> Easter egg — não aparece na grade principal
+        </p>
+      )}
+      <Input
+        placeholder="Título do envelope"
+        value={form.title}
+        onChange={(e) => setForm({ ...form, title: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <Textarea
+        rows={3}
+        placeholder="Mensagem ao abrir"
+        value={form.message}
+        onChange={(e) => setForm({ ...form, message: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <div className="space-y-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+          Ícone
+        </span>
+        <IconPicker
+          value={form.icon_name ?? "Mail"}
+          onChange={(icon_name) => setForm({ ...form, icon_name })}
+        />
+      </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
+          <Switch
+            id={`easter-${m.id}`}
+            checked={form.is_easter_egg}
+            onCheckedChange={(is_easter_egg) => setForm({ ...form, is_easter_egg })}
+          />
+          <Label htmlFor={`easter-${m.id}`} className="text-sm">
+            Marcar como easter egg
+          </Label>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase text-muted-foreground">Ordem:</span>
+            <Input
+              type="number"
+              value={form.sort_order}
+              onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
+              className="w-16 bg-white/5 rounded-lg border-white/5"
+            />
+          </div>
+          <Button size="sm" onClick={save} className="rounded-lg">
+            <Save className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={remove}
+            className="text-muted-foreground hover:text-destructive rounded-lg"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
