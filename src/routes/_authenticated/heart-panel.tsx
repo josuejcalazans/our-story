@@ -1492,6 +1492,7 @@ function SettingsEditor() {
         secret_message: form.secret_message,
         hidden_video_url: form.hidden_video_url,
         music_url: form.music_url,
+        ending_audio_url: form.ending_audio_url,
         theme_mode: form.theme_mode,
         page_gate_enabled: form.page_gate_enabled,
         access_date: form.access_date,
@@ -1642,6 +1643,29 @@ function SettingsEditor() {
           onChange={(e) => setForm({ ...form, secret_message: e.target.value })}
           className="bg-white/5 rounded-xl border-white/5"
         />
+      </div>
+      <div className="space-y-2">
+        <label htmlFor="ending-audio-url" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+          Áudio da última surpresa
+        </label>
+        <p className="text-xs text-muted-foreground ml-1">
+          Toca no final cinematográfico, quando ela clicar em &quot;Uma última surpresa&quot;.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex-1 w-full">
+            <Input
+              id="ending-audio-url"
+              placeholder="URL do áudio ou faça upload ->"
+              value={form.ending_audio_url}
+              onChange={(e) => setForm({ ...form, ending_audio_url: e.target.value })}
+              className="bg-white/5 rounded-xl border-white/5"
+            />
+          </div>
+          <MediaUpload
+            type="audio"
+            onUpload={(url) => setForm({ ...form, ending_audio_url: url })}
+          />
+        </div>
       </div>
       <div className="space-y-2">
         <label htmlFor="music-url" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
