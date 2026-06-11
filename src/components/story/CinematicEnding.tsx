@@ -10,9 +10,10 @@ const LINES = [
   "Para todos os capítulos que já vivemos...",
   "E para todos os que ainda vamos escrever.",
   "Eu te amo",
+  "Para todo sempre, minha deusa",
 ] as const;
 
-const LINE_DWELL_MS = [4800, 4200, 5200];
+const LINE_DWELL_MS = [4800, 4200, 3600, 6200];
 
 function RisingParticles() {
   const particles = Array.from({ length: 28 }, (_, id) => ({
@@ -146,14 +147,15 @@ function FutureLine({ text }: { text: string }) {
   );
 }
 
-function LoveLine({ text }: { text: string }) {
+function LoveLine({ text, showHeart = true }: { text: string; showHeart?: boolean }) {
   const chars = [...text];
+  const charDelay = 0.09;
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="flex items-center justify-center gap-3 sm:gap-4"
+      className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 px-2"
     >
       <span
         aria-label={text}
@@ -174,7 +176,7 @@ function LoveLine({ text }: { text: string }) {
               ],
             }}
             transition={{
-              delay: 0.2 + i * 0.09,
+              delay: 0.2 + i * charDelay,
               duration: 0.7,
               ease: [0.34, 1.4, 0.64, 1],
             }}
@@ -185,15 +187,61 @@ function LoveLine({ text }: { text: string }) {
           </motion.span>
         ))}
       </span>
+      {showHeart && (
+        <motion.span
+          initial={{ opacity: 0, scale: 0 }}
+          animate={{ opacity: 1, scale: [0, 1.25, 1] }}
+          transition={{ delay: 0.2 + chars.length * charDelay + 0.15, duration: 0.6 }}
+          className="flex shrink-0 items-center justify-center"
+        >
+          <Heart
+            aria-hidden
+            className="h-9 w-9 fill-accent text-accent drop-shadow-[0_0_24px_rgba(236,72,153,0.65)] sm:h-11 sm:w-11 md:h-12 md:w-12"
+          />
+        </motion.span>
+      )}
+    </motion.div>
+  );
+}
+
+function GoddessLine({ text }: { text: string }) {
+  const words = text.split(" ");
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 px-2"
+    >
+      <p
+        aria-label={text}
+        className="mx-auto max-w-xl text-center font-letter text-2xl italic leading-relaxed text-foreground/95 sm:text-3xl md:text-4xl"
+      >
+        {words.map((word, i) => (
+          <motion.span
+            key={`${word}-${i}`}
+            initial={{ opacity: 0, y: 20, filter: "blur(10px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            transition={{
+              delay: 0.25 + i * 0.12,
+              duration: 0.75,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="mr-[0.32em] inline-block"
+          >
+            {word}
+          </motion.span>
+        ))}
+      </p>
       <motion.span
         initial={{ opacity: 0, scale: 0 }}
-        animate={{ opacity: 1, scale: [0, 1.25, 1] }}
-        transition={{ delay: 0.2 + chars.length * 0.09 + 0.15, duration: 0.6 }}
+        animate={{ opacity: 1, scale: [0, 1.2, 1] }}
+        transition={{ delay: 0.25 + words.length * 0.12 + 0.2, duration: 0.6 }}
         className="flex shrink-0 items-center justify-center"
       >
         <Heart
           aria-hidden
-          className="h-9 w-9 fill-accent text-accent drop-shadow-[0_0_24px_rgba(236,72,153,0.65)] sm:h-11 sm:w-11 md:h-12 md:w-12"
+          className="h-8 w-8 fill-accent/90 text-accent drop-shadow-[0_0_20px_rgba(236,72,153,0.5)] sm:h-9 sm:w-9"
         />
       </motion.span>
     </motion.div>
@@ -221,6 +269,7 @@ function EndingLine({
       {index === 0 && <ChaptersLine text={text} onRevealed={onFirstLineRevealed} />}
       {index === 1 && <FutureLine text={text} />}
       {index === 2 && <LoveLine text={text} />}
+      {index === 3 && <GoddessLine text={text} />}
     </motion.div>
   );
 }
