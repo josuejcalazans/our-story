@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  createAudioContext,
-  HEARTBEAT_CYCLE_MS,
-  startHeartbeatLoop,
-} from "@/lib/heartbeat-sound";
+import { createAudioContext, startHeartbeatLoop } from "@/lib/heartbeat-sound";
 
-export function useHeartbeatSound(enabled = true) {
+export function useHeartbeatSound(enabled = true, getElapsedMs: () => number) {
   const ctxRef = useRef<AudioContext | null>(null);
   const masterRef = useRef<GainNode | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
+  const getElapsedRef = useRef(getElapsedMs);
   const [muted, setMuted] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+
+  getElapsedRef.current = getElapsedMs;
 
   const ensureContext = useCallback(() => {
     if (!ctxRef.current || ctxRef.current.state === "closed") {
@@ -39,7 +38,6 @@ export function useHeartbeatSound(enabled = true) {
     setUnlocked(false);
   }, [stopLoop]);
 
-  /** Chamar direto de click / pointerdown. */
   const unlockFromGesture = useCallback(() => {
     if (!enabled || muted || typeof window === "undefined") return;
 
@@ -51,7 +49,7 @@ export function useHeartbeatSound(enabled = true) {
         master.gain.value = 0.72;
         setUnlocked(true);
         if (!stopRef.current) {
-          stopRef.current = startHeartbeatLoop(ctx, master);
+          stopRef.current = startHeartbeatLoop(ctx, master, () => getElapsedRef.current());
         }
       });
     } catch {
@@ -85,6 +83,5 @@ export function useHeartbeatSound(enabled = true) {
     mute,
     unmuteFromGesture,
     unlockFromGesture,
-    cycleMs: HEARTBEAT_CYCLE_MS,
   };
 }
