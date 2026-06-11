@@ -37,35 +37,67 @@ export function useHeartbeatSound(getElapsedMs: () => number, enabled = true) {
   }, []);
 
   /** Deve rodar sincronamente no gesto do usuário (touch/click) — exigido no iOS. */
-  const unlockFromGesture = useCallback(() => {
-    if (!enabled || muted || typeof window === "undefined") return;
+  // const unlockFromGesture = useCallback(() => {
+  //   if (!enabled || muted || typeof window === "undefined") return;
 
+  //   try {
+  //     const { ctx, master } = ensureContext();
+
+  //     if (ctx.state === "suspended") {
+  //       void ctx.resume();
+  //     }
+
+  //     // Buffer silencioso — ajuda a desbloquear áudio no Safari iOS
+  //     const buffer = ctx.createBuffer(1, 1, 22050);
+  //     const ping = ctx.createBufferSource();
+  //     ping.buffer = buffer;
+  //     ping.connect(ctx.destination);
+  //     ping.start();
+  //     // ping.start(0);
+
+  //     master.gain.value = 0.72;
+  //     setUnlocked(true);
+
+  //     if (!scheduledRef.current) {
+  //       scheduleLoaderHeartbeat(ctx, master, () => getElapsedRef.current());
+  //       scheduledRef.current = true;
+  //     }
+  //   } catch {
+  //     /* Web Audio indisponível */
+  //   }
+  // }, [enabled, muted, ensureContext]);
+  const unlockFromGesture = useCallback(async () => {
+    if (!enabled || muted || typeof window === "undefined") return;
+  
     try {
       const { ctx, master } = ensureContext();
-
-      if (ctx.state === "suspended") {
-        void ctx.resume();
+  
+      if (ctx.state !== "running") {
+        await ctx.resume();
       }
-
-      // Buffer silencioso — ajuda a desbloquear áudio no Safari iOS
+  
       const buffer = ctx.createBuffer(1, 1, 22050);
       const ping = ctx.createBufferSource();
       ping.buffer = buffer;
       ping.connect(ctx.destination);
-      ping.start(0);
-
+      ping.start();
+  
       master.gain.value = 0.72;
+  
       setUnlocked(true);
-
+  
       if (!scheduledRef.current) {
-        scheduleLoaderHeartbeat(ctx, master, () => getElapsedRef.current());
+        scheduleLoaderHeartbeat(
+          ctx,
+          master,
+          () => getElapsedRef.current(),
+        );
         scheduledRef.current = true;
       }
-    } catch {
-      /* Web Audio indisponível */
+    } catch (err) {
+      console.error(err);
     }
   }, [enabled, muted, ensureContext]);
-
   const mute = useCallback(() => {
     setMuted(true);
     if (masterRef.current) masterRef.current.gain.value = 0;
