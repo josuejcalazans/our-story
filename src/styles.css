@@ -126,6 +126,19 @@
     background-clip: text;
     color: transparent;
   }
+  .ecg-line {
+    stroke-dasharray: 320;
+    animation: ecg-draw 1.35s linear infinite;
+  }
+  .ecg-scan-line {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(0.74 0.21 350 / 0.35),
+      transparent
+    );
+    animation: ecg-scan 1.35s linear infinite;
+  }
 }
 
 @keyframes float {
@@ -143,4 +156,14 @@
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+@keyframes ecg-draw {
+  0% { stroke-dashoffset: 320; opacity: 0.35; }
+  15% { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0.85; }
+}
+@keyframes ecg-scan {
+  0% { transform: translateX(-2rem); opacity: 0; }
+  20% { opacity: 0.7; }
+  100% { transform: translateX(14rem); opacity: 0; }
 }
