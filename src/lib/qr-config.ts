@@ -1,10 +1,13 @@
-
 import type { Options } from "qr-code-styling";
+import type { ImageFitMode } from "./image-fit";
 import type { DotType, CornerSquareType, CornerDotType } from "./qr-styles";
 
 export type StyledQROptions = {
   data: string;
+  /** Pixel size of the QR canvas being rendered */
   size: number;
+  /** Preview/design QR size — logoSize is relative to this, not export size */
+  designQrSize?: number;
   fgColor: string;
   bgColor: string;
   level: "L" | "M" | "Q" | "H";
@@ -12,9 +15,21 @@ export type StyledQROptions = {
   cornerSquareStyle: CornerSquareType;
   cornerDotStyle: CornerDotType;
   logoUrl: string;
+  /** Logo diameter on the design preview (px) */
   logoSize: number;
   logoExcavate: boolean;
+  /** Original image for high-res reprocessing on export */
+  logoRawSource?: string;
+  logoFitMode?: ImageFitMode;
+  logoFocalX?: number;
+  logoFocalY?: number;
+  logoZoom?: number;
 };
+
+export function logoImageFraction(options: StyledQROptions): number {
+  const designSize = options.designQrSize ?? options.size;
+  return Math.min(0.52, options.logoSize / Math.max(designSize, 1));
+}
 
 export function buildQRStylingConfig(options: StyledQROptions): Options {
   const hasLogo = Boolean(options.logoUrl);
@@ -50,7 +65,7 @@ export function buildQRStylingConfig(options: StyledQROptions): Options {
       ? {
           crossOrigin: "anonymous",
           margin: 2,
-          imageSize: Math.min(0.52, options.logoSize / options.size),
+          imageSize: logoImageFraction(options),
           hideBackgroundDots: options.logoExcavate,
         }
       : {

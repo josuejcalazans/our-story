@@ -1,3 +1,4 @@
+import { resolveLogoForQrExport } from "@/lib/image-fit";
 import QRCodeStyling from "qr-code-styling";
 import { buildQRStylingConfig, type StyledQROptions } from "@/lib/qr-config";
 
@@ -92,19 +93,51 @@ async function blobToCanvas(blob: Blob, size: number): Promise<HTMLCanvasElement
   }
 }
 
+export async function prepareExportOptions(
+  options: StyledQROptions,
+  qrPixelSize: number,
+): Promise<StyledQROptions> {
+  const designQrSize = options.designQrSize ?? options.size;
+  let logoUrl = options.logoUrl;
+
+  if (logoUrl && qrPixelSize > designQrSize) {
+    const source = options.logoRawSource || options.logoUrl;
+    logoUrl = await resolveLogoForQrExport(source, {
+      designQrSize,
+      exportQrSize: qrPixelSize,
+      logoDisplaySize: options.logoSize,
+      logoFitMode: options.logoFitMode,
+      logoFocalX: options.logoFocalX,
+      logoFocalY: options.logoFocalY,
+      logoZoom: options.logoZoom,
+      bgColor: options.bgColor,
+    });
+  }
+
+  return {
+    ...options,
+    size: qrPixelSize,
+    designQrSize,
+    logoUrl,
+  };
+}
+
 export async function renderQRSourceCanvas(
   options: StyledQROptions,
   qrPixelSize: number,
   fallbackCanvas?: HTMLCanvasElement | null,
+  /** Skip logo reprocessing when options were already prepared for this pixel size */
+  alreadyPrepared = false,
 ): Promise<HTMLCanvasElement> {
   if (!options.data.trim()) {
     throw new Error("QR data is empty");
   }
 
   try {
-    const qr = new QRCodeStyling(
-      buildQRStylingConfig({ ...options, size: qrPixelSize }),
-    );
+    const exportOptions = alreadyPrepared
+      ? { ...options, size: qrPixelSize }
+      : await prepareExportOptions(options, qrPixelSize);
+    const qr = new QRCodeStyling(buildQRStylingConfig(exportOptions));
     const blob = await qr.getRawData("png");
     if (!blob || !(blob instanceof Blob)) {
       throw new Error("QR canvas not found");

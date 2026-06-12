@@ -18,10 +18,41 @@ const MAX_IMAGE_EDGE = 2400;
 export const MAX_LOGO_FILE_BYTES = 20 * 1024 * 1024;
 
 /** Resolução da foto processada — sempre bem acima do tamanho exibido no QR */
-export function logoProcessPixelSize(qrSize: number, logoSize: number) {
-  const displayRatio = logoSize / Math.max(qrSize, 1);
-  const target = Math.round(Math.max(qrSize, logoSize) * Math.max(4, displayRatio * 8));
-  return Math.min(2048, Math.max(1024, target));
+export function logoProcessPixelSize(qrSize: number, logoDisplayPx: number) {
+  const target = Math.round(Math.max(logoDisplayPx * 2.5, qrSize * 0.45));
+  return Math.min(4096, Math.max(1024, target));
+}
+
+export type LogoExportContext = {
+  designQrSize: number;
+  exportQrSize: number;
+  logoDisplaySize: number;
+  logoFitMode?: ImageFitMode;
+  logoFocalX?: number;
+  logoFocalY?: number;
+  logoZoom?: number;
+  bgColor?: string;
+};
+
+/** Reprocessa a logo em alta resolução proporcional ao QR exportado */
+export async function resolveLogoForQrExport(
+  logoSource: string,
+  context: LogoExportContext,
+): Promise<string> {
+  if (!logoSource) return "";
+
+  const designQrSize = Math.max(context.designQrSize, 1);
+  const exportLogoDisplay = context.logoDisplaySize * (context.exportQrSize / designQrSize);
+  const pixelSize = logoProcessPixelSize(context.exportQrSize, exportLogoDisplay);
+
+  return fitImageToSquare(logoSource, {
+    size: pixelSize,
+    mode: context.logoFitMode ?? "cover",
+    focalX: context.logoFocalX ?? 50,
+    focalY: context.logoFocalY ?? 42,
+    zoom: Math.max(1, Math.min(2, (context.logoZoom ?? 108) / 100)),
+    bgColor: context.bgColor ?? "#ffffff",
+  });
 }
 
 function canvasToSharpDataUrl(canvas: HTMLCanvasElement) {
@@ -77,7 +108,7 @@ export async function fitImageToSquare(
     bgColor = "#ffffff",
   } = options;
 
-  const normalized = await normalizeImageSource(source);
+  const normalized = await normalizeImageSource(source, Math.max(size * 2, MAX_IMAGE_EDGE));
   const img = await loadImage(normalized);
 
   const canvas = document.createElement("canvas");
