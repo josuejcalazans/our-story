@@ -52,7 +52,7 @@ async function waitForQRRender(hasLogo: boolean) {
   }
 }
 
-async function renderQRSourceCanvas(
+export async function renderQRSourceCanvas(
   options: StyledQROptions,
   qrPixelSize: number,
 ): Promise<HTMLCanvasElement> {
