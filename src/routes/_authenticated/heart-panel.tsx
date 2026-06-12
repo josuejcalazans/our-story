@@ -68,10 +68,19 @@ import { Label } from "@/components/ui/label";
 import QRStylePicker from "@/components/QRStylePicker";
 import { useStyledQRCode } from "@/hooks/use-styled-qr";
 import { canvasToBlob, downloadBlob, EXPORT_RESOLUTIONS, renderExportCanvas, type ExportResolution } from "@/lib/qr-export";
-import { renderPrintCardCanvas } from "@/lib/qr-print-card";
+import {
+  renderPrintCardBackCanvas,
+  renderPrintCardFrontCanvas,
+  renderPrintCardSheetCanvas,
+} from "@/lib/qr-print-card";
+import {
+  fitImageToSquare,
+  MAX_LOGO_FILE_BYTES,
+  readImageFileNormalized,
+  type ImageFitMode,
+} from "@/lib/image-fit";
 import {
   fetchLogoAsDataUrl,
-  readImageFileAsDataUrl,
   removeLogoBackground,
 } from "@/lib/qr-logo";
 import {
@@ -454,15 +463,22 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
 /* -------------------- Share Panel -------------------- */
 function SharePanel() {
   const { data: settings } = useSettings();
+  const qc = useQueryClient();
   const [url, setUrl] = useState("");
   const [fgColor, setFgColor] = useState("#eb5e8e");
   const [bgColor, setBgColor] = useState("#ffffff");
   const [size, setSize] = useState(280);
   const [level, setLevel] = useState<ECLevel>("H");
+  const [logoSource, setLogoSource] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoInput, setLogoInput] = useState("");
-  const [logoSize, setLogoSize] = useState(50);
+  const [logoSize, setLogoSize] = useState(72);
+  const [logoFitMode, setLogoFitMode] = useState<ImageFitMode>("cover");
+  const [logoFocalX, setLogoFocalX] = useState(50);
+  const [logoFocalY, setLogoFocalY] = useState(42);
+  const [logoZoom, setLogoZoom] = useState(108);
+  const [logoProcessing, setLogoProcessing] = useState(false);
   const [logoExcavate, setLogoExcavate] = useState(true);
   const [logoOriginalUrl, setLogoOriginalUrl] = useState<string | null>(null);
   const [removingBg, setRemovingBg] = useState(false);
@@ -481,6 +497,10 @@ function SharePanel() {
   const [isExporting, setIsExporting] = useState(false);
   const [isPrintingCard, setIsPrintingCard] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [cardTagline, setCardTagline] = useState("Algo feito só para você");
+  const [cardScanLine, setCardScanLine] = useState("Escaneie para abrir nossa história");
+  const [cardBackMessage, setCardBackMessage] = useState("");
+  const [savingCardText, setSavingCardText] = useState(false);
 
   const qrCanvasRef = useRef<HTMLDivElement>(null);
 
@@ -490,6 +510,48 @@ function SharePanel() {
     if (raw) setHistory(JSON.parse(raw));
   }, []);
 
+  useEffect(() => {
+    if (!settings) return;
+    setCardTagline(settings.print_card_tagline || "Algo feito só para você");
+    setCardScanLine(settings.print_card_scan_line || "Escaneie para abrir nossa história");
+    setCardBackMessage(settings.print_card_back_message || "");
+  }, [settings]);
+
+  useEffect(() => {
+    if (!logoSource) {
+      setLogoUrl("");
+      return;
+    }
+
+    let cancelled = false;
+    setLogoProcessing(true);
+
+    void fitImageToSquare(logoSource, {
+      size: 640,
+      mode: logoFitMode,
+      focalX: logoFocalX,
+      focalY: logoFocalY,
+      zoom: logoZoom / 100,
+      bgColor,
+    })
+      .then((processed) => {
+        if (!cancelled) {
+          setLogoUrl(processed);
+          setLogoPreview(processed);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Erro ao ajustar a foto");
+      })
+      .finally(() => {
+        if (!cancelled) setLogoProcessing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [logoSource, logoFitMode, logoFocalX, logoFocalY, logoZoom, bgColor]);
+
   const handleLogoFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -497,16 +559,15 @@ function SharePanel() {
       toast.error("Envie um arquivo de imagem");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("A imagem deve ter menos de 2MB");
+    if (file.size > MAX_LOGO_FILE_BYTES) {
+      toast.error("A imagem deve ter menos de 10MB");
       return;
     }
     try {
-      const result = await readImageFileAsDataUrl(file);
-      setLogoUrl(result);
-      setLogoPreview(result);
+      const result = await readImageFileNormalized(file);
+      setLogoSource(result);
       setLogoOriginalUrl(null);
-      toast.success("Logo enviada!");
+      toast.success("Foto enviada! Ajuste o enquadramento abaixo.");
     } catch {
       toast.error("Erro ao ler a imagem");
     }
@@ -515,23 +576,22 @@ function SharePanel() {
   const handleLogoUrlChange = useCallback(async (value: string) => {
     setLogoInput(value);
     if (!value) {
+      setLogoSource("");
       setLogoUrl("");
       setLogoPreview(null);
       return;
     }
     if (value.startsWith("data:")) {
-      setLogoUrl(value);
-      setLogoPreview(value);
+      setLogoSource(value);
       return;
     }
     setLogoPreview(value);
     setLogoUrl("");
     try {
       const dataUrl = await fetchLogoAsDataUrl(value);
-      setLogoUrl(dataUrl);
-      setLogoPreview(dataUrl);
+      setLogoSource(dataUrl);
       setLogoOriginalUrl(null);
-      toast.success("Logo carregada!");
+      toast.success("Foto carregada!");
     } catch {
       setLogoPreview(null);
       toast.error("Não foi possível carregar. Tente fazer upload do arquivo.");
@@ -539,6 +599,7 @@ function SharePanel() {
   }, []);
 
   const clearLogo = useCallback(() => {
+    setLogoSource("");
     setLogoUrl("");
     setLogoInput("");
     setLogoPreview(null);
@@ -547,28 +608,37 @@ function SharePanel() {
   }, []);
 
   const handleRemoveLogoBackground = useCallback(async () => {
-    if (!logoUrl) return;
+    const source = logoSource || logoUrl;
+    if (!source) return;
     setRemovingBg(true);
     try {
-      const out = await removeLogoBackground(logoUrl);
-      setLogoOriginalUrl((prev) => prev ?? logoUrl);
-      setLogoUrl(out);
-      setLogoPreview(out);
+      const out = await removeLogoBackground(source);
+      setLogoOriginalUrl((prev) => prev ?? source);
+      setLogoSource(out);
       toast.success("Fundo removido");
     } catch {
       toast.error("Não foi possível remover o fundo");
     } finally {
       setRemovingBg(false);
     }
-  }, [logoUrl]);
+  }, [logoSource, logoUrl]);
 
   const restoreLogoBackground = useCallback(() => {
     if (!logoOriginalUrl) return;
-    setLogoUrl(logoOriginalUrl);
-    setLogoPreview(logoOriginalUrl);
+    setLogoSource(logoOriginalUrl);
     setLogoOriginalUrl(null);
-    toast.success("Logo original restaurada");
+    toast.success("Foto original restaurada");
   }, [logoOriginalUrl]);
+
+  const printCardLayout = useMemo(
+    () => ({
+      herName: settings?.her_name,
+      tagline: cardTagline,
+      scanLine: cardScanLine,
+      backMessage: cardBackMessage,
+    }),
+    [settings?.her_name, cardTagline, cardScanLine, cardBackMessage],
+  );
 
   const styledQROptions = useMemo(
     () => ({
@@ -677,18 +747,63 @@ function SharePanel() {
     setIsPrintingCard(true);
     try {
       const margin = includeMargin ? borderMargin : 0;
-      const cardCanvas = await renderPrintCardCanvas(styledQROptions, margin, {
-        herName: settings?.her_name,
-      });
-      const blob = await canvasToBlob(cardCanvas);
-      downloadBlob(blob, `cartao-nossa-historia-${Date.now()}.png`);
-      toast.success("Cartão para impressão baixado!");
+      const sheet = await renderPrintCardSheetCanvas(styledQROptions, margin, printCardLayout);
+      const blob = await canvasToBlob(sheet);
+      downloadBlob(blob, `cartao-frente-verso-${Date.now()}.png`);
+      toast.success("Cartão frente + verso baixado!");
     } catch {
       toast.error("Erro ao gerar cartão. Tente novamente.");
     } finally {
       setIsPrintingCard(false);
     }
-  }, [url, styledQROptions, includeMargin, borderMargin, isPrintingCard, settings?.her_name]);
+  }, [url, styledQROptions, includeMargin, borderMargin, isPrintingCard, printCardLayout]);
+
+  const downloadPrintCardFront = useCallback(async () => {
+    if (!url.trim() || isPrintingCard) return;
+    setIsPrintingCard(true);
+    try {
+      const margin = includeMargin ? borderMargin : 0;
+      const canvas = await renderPrintCardFrontCanvas(styledQROptions, margin, printCardLayout);
+      downloadBlob(await canvasToBlob(canvas), `cartao-frente-${Date.now()}.png`);
+      toast.success("Frente baixada!");
+    } catch {
+      toast.error("Erro ao gerar frente.");
+    } finally {
+      setIsPrintingCard(false);
+    }
+  }, [url, styledQROptions, includeMargin, borderMargin, isPrintingCard, printCardLayout]);
+
+  const downloadPrintCardBack = useCallback(async () => {
+    if (isPrintingCard) return;
+    setIsPrintingCard(true);
+    try {
+      const canvas = await renderPrintCardBackCanvas(printCardLayout);
+      downloadBlob(await canvasToBlob(canvas), `cartao-verso-${Date.now()}.png`);
+      toast.success("Verso baixado!");
+    } catch {
+      toast.error("Erro ao gerar verso.");
+    } finally {
+      setIsPrintingCard(false);
+    }
+  }, [isPrintingCard, printCardLayout]);
+
+  const savePrintCardTexts = useCallback(async () => {
+    setSavingCardText(true);
+    const { error } = await supabase
+      .from("site_settings")
+      .update({
+        print_card_tagline: cardTagline,
+        print_card_scan_line: cardScanLine,
+        print_card_back_message: cardBackMessage,
+      })
+      .eq("id", 1);
+    if (error) toast.error(error.message);
+    else {
+      toastRomanticSave("settings");
+      qc.invalidateQueries({ queryKey: ["site_settings"] });
+    }
+    setSavingCardText(false);
+  }, [cardTagline, cardScanLine, cardBackMessage, qc]);
 
   const restoreItem = (item: HistoryItem) => {
     setFgColor(item.fgColor);
@@ -696,6 +811,7 @@ function SharePanel() {
     setSize(item.size);
     setLevel(item.level);
     setLogoUrl(item.logoUrl);
+    setLogoSource(item.logoUrl);
     setLogoPreview(item.logoUrl || null);
     setLogoInput("");
     setLogoOriginalUrl(null);
@@ -746,7 +862,50 @@ function SharePanel() {
           </Button>
         </div>
 
-        <div className="flex w-full flex-col gap-3 max-w-sm">
+        <div className="flex w-full flex-col gap-3 max-w-md">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left space-y-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Textos do cartão
+            </p>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Subtítulo (frente)</Label>
+              <Input
+                value={cardTagline}
+                onChange={(e) => setCardTagline(e.target.value)}
+                className="bg-white/5 border-white/10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Instrução abaixo do QR</Label>
+              <Input
+                value={cardScanLine}
+                onChange={(e) => setCardScanLine(e.target.value)}
+                className="bg-white/5 border-white/10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Mensagem do verso</Label>
+              <Textarea
+                rows={4}
+                value={cardBackMessage}
+                onChange={(e) => setCardBackMessage(e.target.value)}
+                placeholder="Escreva uma carta curta para o verso do cartão impresso..."
+                className="bg-white/5 border-white/10 min-h-[100px]"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={savingCardText}
+              onClick={() => void savePrintCardTexts()}
+              className="w-full rounded-xl"
+            >
+              {savingCardText ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Salvar textos do cartão
+            </Button>
+          </div>
+
           <Button
             onClick={downloadPrintCard}
             disabled={isPrintingCard || isExporting}
@@ -757,8 +916,28 @@ function SharePanel() {
             ) : (
               <Printer className="h-4 w-4" />
             )}
-            Baixar cartão para impressão
+            Baixar frente + verso (A6)
           </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void downloadPrintCardFront()}
+              disabled={isPrintingCard || isExporting}
+              className="h-10 rounded-xl border-white/10 text-xs"
+            >
+              Só frente
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void downloadPrintCardBack()}
+              disabled={isPrintingCard || isExporting}
+              className="h-10 rounded-xl border-white/10 text-xs"
+            >
+              Só verso
+            </Button>
+          </div>
           <Button
             onClick={downloadQR}
             disabled={isExporting || isPrintingCard}
@@ -773,8 +952,8 @@ function SharePanel() {
             Só o QR Code (PNG)
           </Button>
           <p className="text-[11px] leading-relaxed text-muted-foreground">
-            Cartão A6 em alta resolução — imprima em papel grosso ou cartolina e
-            entregue como presente físico.
+            Cartão A6 em 300 DPI. Imprima frente e verso em papel grosso — ou use o arquivo
+            combinado com linha de corte.
           </p>
         </div>
       </div>
@@ -900,21 +1079,28 @@ function SharePanel() {
 
           <TabsContent value="logo" className="mt-4 space-y-4">
             <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Logo Central
+              Foto no centro do QR
             </Label>
 
-            {logoPreview && (
-              <div className="relative w-full flex justify-center">
+            {(logoPreview || logoSource) && (
+              <div className="relative w-full flex flex-col items-center gap-3">
                 <div className="relative">
-                  <img
-                    src={logoPreview}
-                    alt="Preview da logo"
-                    className="w-16 h-16 object-contain rounded-lg border border-white/10 bg-white/5"
-                    onError={() => {
-                      setLogoPreview(null);
-                      toast.error("Erro ao carregar imagem");
-                    }}
-                  />
+                  <div
+                    className="h-28 w-28 overflow-hidden rounded-2xl border-2 border-accent/30 bg-white shadow-glow"
+                    style={{ backgroundColor: bgColor }}
+                  >
+                    {logoProcessing ? (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                      </div>
+                    ) : (
+                      <img
+                        src={logoPreview ?? logoSource}
+                        alt="Preview da foto no QR"
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={clearLogo}
@@ -923,6 +1109,9 @@ function SharePanel() {
                     <X className="w-3 h-3" />
                   </button>
                 </div>
+                <p className="text-[10px] text-muted-foreground text-center max-w-[220px]">
+                  Preview quadrado — é assim que aparece no QR
+                </p>
               </div>
             )}
 
@@ -958,7 +1147,7 @@ function SharePanel() {
                     Enviar imagem
                   </Button>
                 <p className="text-[10px] text-muted-foreground/60 text-center">
-                  PNG, JPG, SVG • Máx. 2MB
+                  PNG, JPG, WEBP • Máx. 20MB
                 </p>
               </TabsContent>
               <TabsContent value="url" className="mt-3 space-y-3">
@@ -975,18 +1164,83 @@ function SharePanel() {
               </TabsContent>
             </Tabs>
 
-            {logoUrl && (
+            {logoSource && (
               <div className="space-y-4 pt-3 border-t border-white/5">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={logoFitMode === "cover" ? "default" : "secondary"}
+                    size="sm"
+                    className="text-xs rounded-xl"
+                    onClick={() => setLogoFitMode("cover")}
+                  >
+                    Preencher
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={logoFitMode === "contain" ? "default" : "secondary"}
+                    size="sm"
+                    className="text-xs rounded-xl"
+                    onClick={() => setLogoFitMode("contain")}
+                  >
+                    Caber inteira
+                  </Button>
+                </div>
+
                 <div className="space-y-2">
                   <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>TAMANHO DA LOGO</span>
+                    <span>POSIÇÃO HORIZONTAL</span>
+                    <span>{logoFocalX}%</span>
+                  </div>
+                  <Slider
+                    value={[logoFocalX]}
+                    onValueChange={([v]) => setLogoFocalX(v)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    disabled={logoFitMode === "contain"}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>POSIÇÃO VERTICAL</span>
+                    <span>{logoFocalY}%</span>
+                  </div>
+                  <Slider
+                    value={[logoFocalY]}
+                    onValueChange={([v]) => setLogoFocalY(v)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    disabled={logoFitMode === "contain"}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>ZOOM</span>
+                    <span>{logoZoom}%</span>
+                  </div>
+                  <Slider
+                    value={[logoZoom]}
+                    onValueChange={([v]) => setLogoZoom(v)}
+                    min={100}
+                    max={160}
+                    step={2}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>TAMANHO NO QR</span>
                     <span>{logoSize}px</span>
                   </div>
                   <Slider
                     value={[logoSize]}
                     onValueChange={([v]) => setLogoSize(v)}
-                    min={20}
-                    max={Math.round(size * 0.4)}
+                    min={48}
+                    max={Math.round(size * 0.42)}
                     step={2}
                     className="accent-accent"
                   />
@@ -1533,6 +1787,9 @@ function SettingsEditor() {
         hidden_video_url: form.hidden_video_url,
         music_url: form.music_url,
         ending_audio_url: form.ending_audio_url,
+        print_card_tagline: form.print_card_tagline,
+        print_card_scan_line: form.print_card_scan_line,
+        print_card_back_message: form.print_card_back_message,
         theme_mode: form.theme_mode,
         page_gate_enabled: form.page_gate_enabled,
         access_date: form.access_date,
@@ -1683,6 +1940,48 @@ function SettingsEditor() {
           onChange={(e) => setForm({ ...form, secret_message: e.target.value })}
           className="bg-white/5 rounded-xl border-white/5"
         />
+      </div>
+      <div className="space-y-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+        <div>
+          <h4 className="font-display text-lg">Cartão para impressão (QR)</h4>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Textos usados na frente e no verso do cartão A6.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="print-card-tagline" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+            Subtítulo da frente
+          </label>
+          <Input
+            id="print-card-tagline"
+            value={form.print_card_tagline}
+            onChange={(e) => setForm({ ...form, print_card_tagline: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5"
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="print-card-scan" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+            Texto abaixo do QR
+          </label>
+          <Input
+            id="print-card-scan"
+            value={form.print_card_scan_line}
+            onChange={(e) => setForm({ ...form, print_card_scan_line: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5"
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="print-card-back" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+            Mensagem do verso
+          </label>
+          <Textarea
+            id="print-card-back"
+            rows={4}
+            value={form.print_card_back_message}
+            onChange={(e) => setForm({ ...form, print_card_back_message: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5 min-h-[100px]"
+          />
+        </div>
       </div>
       <div className="space-y-2">
         <label htmlFor="ending-audio-url" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
