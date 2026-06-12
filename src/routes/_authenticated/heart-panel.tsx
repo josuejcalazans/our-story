@@ -34,7 +34,24 @@ import {
   Link,
   MapPin,
   Mail,
+  ArrowUpDown,
 } from "lucide-react";
+import {
+  AdminOrderActions,
+  AdminOrderHeader,
+  AdminOrderHint,
+  AdminOrderableGrid,
+  AdminOrderableShell,
+} from "@/components/admin/AdminOrderableCard";
+import { sortGalleryByDate, sortGalleryImages } from "@/lib/gallery-sort";
+import {
+  nextSortOrder,
+  persistTableOrder,
+  sortByOrder,
+  swapInList,
+} from "@/lib/admin-order";
+import { isHeicFile, prepareImageForUpload } from "@/lib/prepare-upload-image";
+import StoryVideoPlayer from "@/components/story/StoryVideoPlayer";
 import { useAuth } from "@/lib/use-auth";
 import {
   useTimeline,
@@ -75,6 +92,7 @@ import {
 } from "@/lib/qr-print-card";
 import {
   fitImageToSquare,
+  logoProcessPixelSize,
   MAX_LOGO_FILE_BYTES,
   readImageFileNormalized,
   type ImageFitMode,
@@ -328,26 +346,83 @@ function GalleryEditor() {
   const { data, isLoading } = useGallery();
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["gallery_images"] });
+  const sorted = useMemo(() => sortGalleryImages(data ?? []), [data]);
 
   async function add() {
-    const nextOrder = (data?.length ?? 0) + 1;
+    const maxOrder = sorted.reduce((max, img) => Math.max(max, img.sort_order), 0);
     const { error } = await supabase.from("gallery_images").insert({
       image_url: "",
       caption: "",
-      sort_order: nextOrder,
+      sort_order: maxOrder + 1,
     });
     if (error) toast.error(error.message);
     else refresh();
   }
 
+  async function moveImage(id: string, direction: "up" | "down") {
+    const list = sortGalleryImages(data ?? []);
+    const index = list.findIndex((img) => img.id === id);
+    if (index < 0) return;
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= list.length) return;
+
+    const next = [...list];
+    [next[index], next[target]] = [next[target], next[index]];
+
+    try {
+      await persistTableOrder("gallery_images", next);
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
+    }
+  }
+
+  async function sortByDate() {
+    const list = sortGalleryByDate(data ?? []);
+    try {
+      await persistTableOrder("gallery_images", list);
+      refresh();
+      toast.success("Galeria ordenada por data!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao ordenar");
+    }
+  }
+
   if (isLoading) return <Loader />;
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        {(data ?? []).map((img) => (
-          <GalleryRow key={img.id} img={img} onChange={refresh} />
+      <AdminOrderHint
+        action={
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void sortByDate()}
+            className="gap-2 rounded-xl"
+          >
+            <ArrowUpDown className="h-4 w-4" />
+            Ordenar por data
+          </Button>
+        }
+      >
+        <p>
+          A ordem aqui é <span className="text-foreground">esquerda → direita</span> no site.
+          Use as setas em cada card para reorganizar.
+        </p>
+      </AdminOrderHint>
+      <AdminOrderableGrid>
+        {sorted.map((img, index) => (
+          <GalleryRow
+            key={img.id}
+            img={img}
+            position={index + 1}
+            total={sorted.length}
+            onMoveUp={() => void moveImage(img.id, "up")}
+            onMoveDown={() => void moveImage(img.id, "down")}
+            onChange={refresh}
+          />
         ))}
-      </div>
+      </AdminOrderableGrid>
       <Button
         onClick={add}
         variant="outline"
@@ -359,9 +434,27 @@ function GalleryEditor() {
   );
 }
 
-function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void }) {
+function GalleryRow({
+  img,
+  position,
+  total,
+  onMoveUp,
+  onMoveDown,
+  onChange,
+}: {
+  img: GalleryImage;
+  position: number;
+  total: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onChange: () => void;
+}) {
   const [form, setForm] = useState(img);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(img);
+  }, [img]);
 
   async function save() {
     setSaving(true);
@@ -374,13 +467,14 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
         description: form.description,
         location: form.location,
         taken_at: form.taken_at || null,
-        sort_order: form.sort_order,
       })
       .eq("id", img.id);
     if (error) toast.error(error.message);
-    else toastRomanticSave("gallery");
+    else {
+      toastRomanticSave("gallery");
+      onChange();
+    }
     setSaving(false);
-    onChange();
   }
 
   async function remove() {
@@ -390,8 +484,20 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
     else onChange();
   }
 
+  const subtitle = form.taken_at
+    ? new Date(`${form.taken_at}T12:00:00`).toLocaleDateString("pt-BR")
+    : undefined;
+
   return (
-    <div className="glass space-y-4 rounded-2xl p-4">
+    <AdminOrderableShell>
+      <AdminOrderHeader
+        position={position}
+        total={total}
+        title={`Foto ${position} de ${total}`}
+        subtitle={subtitle}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+      />
       <MediaUpload
         type="image"
         currentUrl={form.image_url}
@@ -432,31 +538,13 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
         />
       </div>
 
-      <div className="flex items-center justify-between pt-2 border-t border-white/5">
-        <div className="flex gap-2">
-          <Button onClick={save} disabled={saving} size="sm" className="rounded-lg px-4">
-            {saving ? "..." : "Salvar"}
-          </Button>
-          <Button
-            onClick={remove}
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground hover:text-destructive rounded-lg"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase text-muted-foreground">Ordem:</span>
-          <input
-            type="number"
-            value={form.sort_order}
-            onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
-            className="w-10 bg-transparent text-center text-sm outline-none"
-          />
-        </div>
-      </div>
-    </div>
+      <AdminOrderActions
+        onSave={save}
+        onRemove={remove}
+        saving={saving}
+        position={position}
+      />
+    </AdminOrderableShell>
   );
 }
 
@@ -473,7 +561,7 @@ function SharePanel() {
   const [logoUrl, setLogoUrl] = useState("");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoInput, setLogoInput] = useState("");
-  const [logoSize, setLogoSize] = useState(72);
+  const [logoSize, setLogoSize] = useState(112);
   const [logoFitMode, setLogoFitMode] = useState<ImageFitMode>("cover");
   const [logoFocalX, setLogoFocalX] = useState(50);
   const [logoFocalY, setLogoFocalY] = useState(42);
@@ -527,7 +615,7 @@ function SharePanel() {
     setLogoProcessing(true);
 
     void fitImageToSquare(logoSource, {
-      size: 640,
+      size: logoProcessPixelSize(size, logoSize),
       mode: logoFitMode,
       focalX: logoFocalX,
       focalY: logoFocalY,
@@ -550,12 +638,12 @@ function SharePanel() {
     return () => {
       cancelled = true;
     };
-  }, [logoSource, logoFitMode, logoFocalX, logoFocalY, logoZoom, bgColor]);
+  }, [logoSource, logoFitMode, logoFocalX, logoFocalY, logoZoom, bgColor, size, logoSize]);
 
   const handleLogoFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    if (!file.type.startsWith("image/") && !isHeicFile(file)) {
       toast.error("Envie um arquivo de imagem");
       return;
     }
@@ -567,6 +655,7 @@ function SharePanel() {
       const result = await readImageFileNormalized(file);
       setLogoSource(result);
       setLogoOriginalUrl(null);
+      setLogoSize(Math.round(size * 0.42));
       toast.success("Foto enviada! Ajuste o enquadramento abaixo.");
     } catch {
       toast.error("Erro ao ler a imagem");
@@ -1239,11 +1328,14 @@ function SharePanel() {
                   <Slider
                     value={[logoSize]}
                     onValueChange={([v]) => setLogoSize(v)}
-                    min={48}
-                    max={Math.round(size * 0.42)}
+                    min={64}
+                    max={Math.round(size * 0.52)}
                     step={2}
                     className="accent-accent"
                   />
+                  <p className="text-[10px] text-muted-foreground">
+                    {Math.round((logoSize / size) * 100)}% do QR — recomendado 38–45%
+                  </p>
                 </div>
 
                 <div className="flex items-center justify-between text-xs">
@@ -1419,17 +1511,33 @@ function MediaUpload({
 
     setUploading(true);
     try {
-      const fileExt = file.name.split(".").pop();
+      let uploadFile = file;
+      if (type === "image") {
+        const wasHeic = isHeicFile(file);
+        uploadFile = await prepareImageForUpload(file);
+        if (wasHeic) {
+          toast.message("Convertendo HEIC para JPEG em alta qualidade…", { duration: 2000 });
+        }
+      }
+
+      const fileExt = uploadFile.name.split(".").pop() || "bin";
       const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      const { error: uploadError } = await supabase.storage.from("assets").upload(filePath, file);
+      const { error: uploadError } = await supabase.storage
+        .from("assets")
+        .upload(filePath, uploadFile, {
+          contentType: uploadFile.type || undefined,
+          cacheControl: "3600",
+        });
 
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("assets").getPublicUrl(filePath);
       onUpload(data.publicUrl);
-      toast.success("Upload concluído!");
+      toast.success(
+        type === "image" && isHeicFile(file) ? "HEIC convertido e enviado!" : "Upload concluído!",
+      );
     } catch (err) {
       toast.error("Erro no upload");
       console.error(err);
@@ -1448,9 +1556,17 @@ function MediaUpload({
               alt="Preview"
               className="h-20 w-32 rounded-lg object-cover shadow-soft"
             />
+          ) : type === "video" ? (
+            <video
+              src={currentUrl}
+              controls
+              playsInline
+              preload="metadata"
+              className="h-20 w-32 rounded-lg border border-white/5 bg-black object-cover"
+            />
           ) : (
             <div className="flex h-20 w-32 items-center justify-center rounded-lg bg-white/10 text-xs border border-white/5">
-              {type === "audio" ? "Áudio" : "Vídeo"}
+              Áudio
             </div>
           )}
           <button
@@ -1476,7 +1592,13 @@ function MediaUpload({
           </span>
           <input
             type="file"
-            accept={type === "image" ? "image/*" : type === "audio" ? "audio/*" : "video/*"}
+            accept={
+              type === "image"
+                ? "image/*,.heic,.heif"
+                : type === "audio"
+                  ? "audio/*"
+                  : "video/*"
+            }
             className="hidden"
             onChange={handleFile}
             disabled={uploading}
@@ -1492,26 +1614,53 @@ function TimelineEditor() {
   const { data, isLoading } = useTimeline();
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["timeline_events"] });
+  const sorted = useMemo(() => sortByOrder(data ?? []), [data]);
 
   async function add() {
-    const nextOrder = (data?.length ?? 0) + 1;
     const { error } = await supabase.from("timeline_events").insert({
-      date_text: "Nova data",
-      title: "Novo momento",
-      description: "Descreva esse momento...",
+      date_text: "",
+      title: "",
+      description: "",
       place: "",
-      sort_order: nextOrder,
+      sort_order: nextSortOrder(sorted),
     });
     if (error) toast.error(error.message);
     else refresh();
   }
 
+  async function moveEvent(id: string, direction: "up" | "down") {
+    const next = swapInList(sorted, id, direction);
+    if (!next) return;
+    try {
+      await persistTableOrder("timeline_events", next);
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
+    }
+  }
+
   if (isLoading) return <Loader />;
   return (
     <div className="space-y-4">
-      {(data ?? []).map((ev) => (
-        <TimelineRow key={ev.id} ev={ev} onChange={refresh} />
-      ))}
+      <AdminOrderHint>
+        <p>
+          A ordem aqui é <span className="text-foreground">de cima para baixo</span> na linha do
+          tempo. Use as setas em cada card para reorganizar.
+        </p>
+      </AdminOrderHint>
+      <AdminOrderableGrid>
+        {sorted.map((ev, index) => (
+          <TimelineRow
+            key={ev.id}
+            ev={ev}
+            position={index + 1}
+            total={sorted.length}
+            onMoveUp={() => void moveEvent(ev.id, "up")}
+            onMoveDown={() => void moveEvent(ev.id, "down")}
+            onChange={refresh}
+          />
+        ))}
+      </AdminOrderableGrid>
       <Button
         onClick={add}
         variant="outline"
@@ -1523,9 +1672,27 @@ function TimelineEditor() {
   );
 }
 
-function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void }) {
+function TimelineRow({
+  ev,
+  position,
+  total,
+  onMoveUp,
+  onMoveDown,
+  onChange,
+}: {
+  ev: TimelineEvent;
+  position: number;
+  total: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onChange: () => void;
+}) {
   const [form, setForm] = useState(ev);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(ev);
+  }, [ev]);
 
   async function save() {
     setSaving(true);
@@ -1536,7 +1703,6 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
         title: form.title,
         description: form.description,
         place: form.place,
-        sort_order: form.sort_order,
         image_url: form.image_url,
         video_url: form.video_url,
         icon_name: form.icon_name,
@@ -1556,53 +1722,38 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
   }
 
   return (
-    <div className="glass space-y-4 rounded-2xl p-6">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-1 sm:col-span-3">
-          <label htmlFor="data" className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
-            Data
-          </label>
-          <StoryDateTextPicker
-            value={form.date_text}
-            onChange={(date_text) => setForm({ ...form, date_text })}
-          />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="title" className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
-            Título
-          </label>
-          <Input
-            placeholder="O que aconteceu?"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="bg-white/5 rounded-xl border-white/5"
-          />
-        </div>
-        <div className="space-y-1">
-          <label htmlFor="place" className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
-            Local (Opcional)
-          </label>
-          <Input
-            placeholder="Ex: Praia de Copacabana"
-            value={form.place || ""}
-            onChange={(e) => setForm({ ...form, place: e.target.value })}
-            className="bg-white/5 rounded-xl border-white/5"
-          />
-        </div>
-      </div>
+    <AdminOrderableShell>
+      <AdminOrderHeader
+        position={position}
+        total={total}
+        title={`Momento ${position} de ${total}`}
+        subtitle={form.title || form.date_text}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+      />
 
-      <div className="space-y-1">
-        <label htmlFor="description" className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
-          Descrição
-        </label>
-
-        <Textarea
-          placeholder="Conte os detalhes..."
-          value={form.description}
-          onChange={(e) => setForm({ ...form, description: e.target.value })}
-          className="bg-white/5 rounded-xl border-white/5 min-h-[100px]"
-        />
-      </div>
+      <StoryDateTextPicker
+        value={form.date_text}
+        onChange={(date_text) => setForm({ ...form, date_text })}
+      />
+      <Input
+        placeholder="O que aconteceu?"
+        value={form.title}
+        onChange={(e) => setForm({ ...form, title: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <Input
+        placeholder="Local (opcional)"
+        value={form.place || ""}
+        onChange={(e) => setForm({ ...form, place: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <Textarea
+        placeholder="Conte os detalhes..."
+        value={form.description}
+        onChange={(e) => setForm({ ...form, description: e.target.value })}
+        className="min-h-[100px] bg-white/5 rounded-xl border-white/5"
+      />
 
       <div className="space-y-2">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
@@ -1627,31 +1778,34 @@ function TimelineRow({ ev, onChange }: { ev: TimelineEvent; onChange: () => void
         />
       </div>
 
-      <div className="flex items-center justify-between pt-2 border-t border-white/5">
-        <div className="flex gap-2">
-          <Button onClick={save} disabled={saving} size="sm" className="rounded-lg px-6">
-            <Save className="h-4 w-4" /> {saving ? "Salvando..." : "Salvar"}
-          </Button>
-          <Button
-            onClick={remove}
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground hover:text-destructive rounded-lg"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase text-muted-foreground">Ordem:</span>
-          <input
-            type="number"
-            value={form.sort_order}
-            onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
-            className="w-12 bg-transparent text-center text-sm outline-none"
-          />
-        </div>
+      <div className="space-y-2">
+        <label htmlFor={`timeline-video-${ev.id}`} className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
+          Link do vídeo (YouTube, Vimeo ou MP4)
+        </label>
+        <Input
+          id={`timeline-video-${ev.id}`}
+          placeholder="https://youtube.com/watch?v=... ou cole o link do upload"
+          value={form.video_url ?? ""}
+          onChange={(e) => setForm({ ...form, video_url: e.target.value || null })}
+          className="bg-white/5 rounded-xl border-white/5 font-mono text-xs"
+        />
+        {form.video_url && (
+          <div className="pt-2">
+            <p className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+              Prévia do vídeo
+            </p>
+            <StoryVideoPlayer url={form.video_url} title={form.title} clickToPlay={false} />
+          </div>
+        )}
       </div>
-    </div>
+
+      <AdminOrderActions
+        onSave={save}
+        onRemove={remove}
+        saving={saving}
+        position={position}
+      />
+    </AdminOrderableShell>
   );
 }
 
@@ -1660,26 +1814,53 @@ function StatsEditor() {
   const { data, isLoading } = useStats();
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["stats"] });
+  const sorted = useMemo(() => sortByOrder(data ?? []), [data]);
 
   async function add() {
-    const nextOrder = (data?.length ?? 0) + 1;
     const { error } = await supabase.from("stats").insert({
       icon: "✨",
       icon_name: "Sparkles",
       label: "novo",
       value: "0",
-      sort_order: nextOrder,
+      sort_order: nextSortOrder(sorted),
     });
     if (error) toast.error(error.message);
     else refresh();
   }
 
+  async function moveStat(id: string, direction: "up" | "down") {
+    const next = swapInList(sorted, id, direction);
+    if (!next) return;
+    try {
+      await persistTableOrder("stats", next);
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
+    }
+  }
+
   if (isLoading) return <Loader />;
   return (
-    <div className="space-y-3">
-      {(data ?? []).map((s) => (
-        <StatRow key={s.id} s={s} onChange={refresh} />
-      ))}
+    <div className="space-y-4">
+      <AdminOrderHint>
+        <p>
+          A ordem aqui é <span className="text-foreground">esquerda → direita</span> nos números do
+          site. Use as setas em cada card.
+        </p>
+      </AdminOrderHint>
+      <AdminOrderableGrid>
+        {sorted.map((s, index) => (
+          <StatRow
+            key={s.id}
+            s={s}
+            position={index + 1}
+            total={sorted.length}
+            onMoveUp={() => void moveStat(s.id, "up")}
+            onMoveDown={() => void moveStat(s.id, "down")}
+            onChange={refresh}
+          />
+        ))}
+      </AdminOrderableGrid>
       <Button onClick={add} variant="outline" className="w-full border-dashed rounded-xl py-8">
         <Plus className="h-4 w-4" /> Adicionar estatística
       </Button>
@@ -1687,9 +1868,30 @@ function StatsEditor() {
   );
 }
 
-function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
+function StatRow({
+  s,
+  position,
+  total,
+  onMoveUp,
+  onMoveDown,
+  onChange,
+}: {
+  s: Stat;
+  position: number;
+  total: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onChange: () => void;
+}) {
   const [form, setForm] = useState(s);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(s);
+  }, [s]);
+
   async function save() {
+    setSaving(true);
     const { error } = await supabase
       .from("stats")
       .update({
@@ -1697,7 +1899,6 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
         icon_name: form.icon_name,
         label: form.label,
         value: form.value,
-        sort_order: form.sort_order,
       })
       .eq("id", s.id);
     if (error) toast.error(error.message);
@@ -1705,48 +1906,38 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
       toastRomanticSave("stats");
       onChange();
     }
+    setSaving(false);
   }
+
   async function remove() {
     if (!confirm("Remover?")) return;
     const { error } = await supabase.from("stats").delete().eq("id", s.id);
     if (error) toast.error(error.message);
     else onChange();
   }
+
   return (
-    <div className="glass space-y-4 rounded-2xl p-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Input
-          placeholder="Rótulo"
-          value={form.label}
-          onChange={(e) => setForm({ ...form, label: e.target.value })}
-          className="bg-white/5 rounded-xl border-white/5"
-        />
-        <Input
-          placeholder="Valor (ex: incontáveis)"
-          value={form.value}
-          onChange={(e) => setForm({ ...form, value: e.target.value })}
-          className="bg-white/5 rounded-xl border-white/5"
-        />
-        <Input
-          type="number"
-          value={form.sort_order}
-          onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
-          className="bg-white/5 rounded-xl border-white/5"
-        />
-        <div className="flex gap-2 sm:justify-end">
-          <Button size="sm" onClick={save} className="rounded-lg">
-            <Save className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={remove}
-            className="text-muted-foreground hover:text-destructive rounded-lg"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+    <AdminOrderableShell>
+      <AdminOrderHeader
+        position={position}
+        total={total}
+        title={`Estatística ${position} de ${total}`}
+        subtitle={form.label || "Sem rótulo"}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+      />
+      <Input
+        placeholder="Rótulo"
+        value={form.label}
+        onChange={(e) => setForm({ ...form, label: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <Input
+        placeholder="Valor (ex: incontáveis)"
+        value={form.value}
+        onChange={(e) => setForm({ ...form, value: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
       <div className="space-y-2">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
           Ícone
@@ -1756,7 +1947,13 @@ function StatRow({ s, onChange }: { s: Stat; onChange: () => void }) {
           onChange={(icon_name) => setForm({ ...form, icon_name })}
         />
       </div>
-    </div>
+      <AdminOrderActions
+        onSave={save}
+        onRemove={remove}
+        saving={saving}
+        position={position}
+      />
+    </AdminOrderableShell>
   );
 }
 
@@ -2072,18 +2269,29 @@ function PlacesEditor() {
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["places"] });
   const [seeding, setSeeding] = useState(false);
+  const sorted = useMemo(() => sortByOrder(data ?? []), [data]);
 
   async function add() {
-    const nextOrder = (data?.length ?? 0) + 1;
     const { error } = await supabase.from("places").insert({
       icon: "📍",
       icon_name: "MapPin",
       title: "Novo lugar",
       subtitle: "Descrição curta",
-      sort_order: nextOrder,
+      sort_order: nextSortOrder(sorted),
     });
     if (error) toast.error(error.message);
     else refresh();
+  }
+
+  async function movePlace(id: string, direction: "up" | "down") {
+    const next = swapInList(sorted, id, direction);
+    if (!next) return;
+    try {
+      await persistTableOrder("places", next);
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
+    }
   }
 
   async function seedDefaults() {
@@ -2110,13 +2318,14 @@ function PlacesEditor() {
   const empty = (data ?? []).length === 0;
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-2xl bg-white/5 p-4 text-sm text-muted-foreground">
+    <div className="space-y-4">
+      <AdminOrderHint>
         <p className="font-medium text-foreground">Capítulo 04 — Nossos lugares</p>
         <p className="mt-1">
-          Cards na página pública com lugares especiais (primeiro encontro, viagem, restaurante…).
+          Cards na página pública com lugares especiais. Use as setas em cada card para definir a
+          ordem.
         </p>
-      </div>
+      </AdminOrderHint>
       {empty && (
         <div className="glass rounded-2xl p-6 text-center">
           <MapPin className="mx-auto h-8 w-8 text-muted-foreground/50" />
@@ -2126,9 +2335,19 @@ function PlacesEditor() {
           </Button>
         </div>
       )}
-      {(data ?? []).map((p) => (
-        <PlaceRow key={p.id} p={p} onChange={refresh} />
-      ))}
+      <AdminOrderableGrid>
+        {sorted.map((p, index) => (
+          <PlaceRow
+            key={p.id}
+            p={p}
+            position={index + 1}
+            total={sorted.length}
+            onMoveUp={() => void movePlace(p.id, "up")}
+            onMoveDown={() => void movePlace(p.id, "down")}
+            onChange={refresh}
+          />
+        ))}
+      </AdminOrderableGrid>
       <Button onClick={add} variant="outline" className="w-full border-dashed rounded-xl py-8">
         <Plus className="h-4 w-4" /> <MapPin className="h-4 w-4" /> Adicionar lugar
       </Button>
@@ -2136,17 +2355,36 @@ function PlacesEditor() {
   );
 }
 
-function PlaceRow({ p, onChange }: { p: Place; onChange: () => void }) {
+function PlaceRow({
+  p,
+  position,
+  total,
+  onMoveUp,
+  onMoveDown,
+  onChange,
+}: {
+  p: Place;
+  position: number;
+  total: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onChange: () => void;
+}) {
   const [form, setForm] = useState(p);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(p);
+  }, [p]);
 
   async function save() {
+    setSaving(true);
     const { error } = await supabase
       .from("places")
       .update({
         icon_name: form.icon_name,
         title: form.title,
         subtitle: form.subtitle,
-        sort_order: form.sort_order,
       })
       .eq("id", p.id);
     if (error) toast.error(error.message);
@@ -2154,6 +2392,7 @@ function PlaceRow({ p, onChange }: { p: Place; onChange: () => void }) {
       toastRomanticSave("places");
       onChange();
     }
+    setSaving(false);
   }
 
   async function remove() {
@@ -2164,21 +2403,27 @@ function PlaceRow({ p, onChange }: { p: Place; onChange: () => void }) {
   }
 
   return (
-    <div className="glass space-y-4 rounded-2xl p-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Input
-          placeholder="Título"
-          value={form.title}
-          onChange={(e) => setForm({ ...form, title: e.target.value })}
-          className="bg-white/5 rounded-xl border-white/5"
-        />
-        <Input
-          placeholder="Subtítulo"
-          value={form.subtitle}
-          onChange={(e) => setForm({ ...form, subtitle: e.target.value })}
-          className="bg-white/5 rounded-xl border-white/5"
-        />
-      </div>
+    <AdminOrderableShell>
+      <AdminOrderHeader
+        position={position}
+        total={total}
+        title={`Lugar ${position} de ${total}`}
+        subtitle={form.title || "Sem título"}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+      />
+      <Input
+        placeholder="Título"
+        value={form.title}
+        onChange={(e) => setForm({ ...form, title: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <Input
+        placeholder="Subtítulo"
+        value={form.subtitle}
+        onChange={(e) => setForm({ ...form, subtitle: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
       <div className="space-y-2">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground ml-1">
           Ícone
@@ -2188,31 +2433,13 @@ function PlaceRow({ p, onChange }: { p: Place; onChange: () => void }) {
           onChange={(icon_name) => setForm({ ...form, icon_name })}
         />
       </div>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] uppercase text-muted-foreground">Ordem:</span>
-          <Input
-            type="number"
-            value={form.sort_order}
-            onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
-            className="w-16 bg-white/5 rounded-lg border-white/5"
-          />
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={save} className="rounded-lg">
-            <Save className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={remove}
-            className="text-muted-foreground hover:text-destructive rounded-lg"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    </div>
+      <AdminOrderActions
+        onSave={save}
+        onRemove={remove}
+        saving={saving}
+        position={position}
+      />
+    </AdminOrderableShell>
   );
 }
 
@@ -2222,27 +2449,50 @@ function LoveNotesEditor() {
   const { data, isLoading } = useLoveNotes();
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["love_notes"] });
+  const sorted = useMemo(() => sortByOrder(data ?? []), [data]);
 
   async function add() {
-    const nextOrder = (data?.length ?? 0) + 1;
     const { error } = await supabase.from("love_notes").insert({
       text: "Nova mensagem...",
-      sort_order: nextOrder,
+      sort_order: nextSortOrder(sorted),
     });
     if (error) toast.error(error.message);
     else refresh();
   }
 
+  async function moveNote(id: string, direction: "up" | "down") {
+    const next = swapInList(sorted, id, direction);
+    if (!next) return;
+    try {
+      await persistTableOrder("love_notes", next);
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
+    }
+  }
+
   if (isLoading) return <Loader />;
   return (
-    <div className="space-y-3">
-      <div className="rounded-2xl bg-white/5 p-4 text-sm text-muted-foreground">
+    <div className="space-y-4">
+      <AdminOrderHint>
         <p className="font-medium text-foreground">Mural de mensagens</p>
-        <p className="mt-1">Pequenas coisas que você ama — aparecem em colunas no site.</p>
-      </div>
-      {(data ?? []).map((note) => (
-        <LoveNoteRow key={note.id} note={note} onChange={refresh} />
-      ))}
+        <p className="mt-1">
+          Pequenas coisas que você ama — aparecem em colunas no site. Use as setas para ordenar.
+        </p>
+      </AdminOrderHint>
+      <AdminOrderableGrid>
+        {sorted.map((note, index) => (
+          <LoveNoteRow
+            key={note.id}
+            note={note}
+            position={index + 1}
+            total={sorted.length}
+            onMoveUp={() => void moveNote(note.id, "up")}
+            onMoveDown={() => void moveNote(note.id, "down")}
+            onChange={refresh}
+          />
+        ))}
+      </AdminOrderableGrid>
       <Button onClick={add} variant="outline" className="w-full border-dashed rounded-xl py-8">
         <Plus className="h-4 w-4" /> Adicionar mensagem
       </Button>
@@ -2250,19 +2500,40 @@ function LoveNotesEditor() {
   );
 }
 
-function LoveNoteRow({ note, onChange }: { note: LoveNote; onChange: () => void }) {
+function LoveNoteRow({
+  note,
+  position,
+  total,
+  onMoveUp,
+  onMoveDown,
+  onChange,
+}: {
+  note: LoveNote;
+  position: number;
+  total: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onChange: () => void;
+}) {
   const [form, setForm] = useState(note);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(note);
+  }, [note]);
 
   async function save() {
+    setSaving(true);
     const { error } = await supabase
       .from("love_notes")
-      .update({ text: form.text, sort_order: form.sort_order })
+      .update({ text: form.text })
       .eq("id", note.id);
     if (error) toast.error(error.message);
     else {
       toastRomanticSave("notes");
       onChange();
     }
+    setSaving(false);
   }
 
   async function remove() {
@@ -2272,31 +2543,32 @@ function LoveNoteRow({ note, onChange }: { note: LoveNote; onChange: () => void 
     else onChange();
   }
 
+  const preview =
+    form.text.length > 48 ? `${form.text.slice(0, 48).trim()}…` : form.text || "Nova mensagem";
+
   return (
-    <div className="glass space-y-3 rounded-2xl p-4">
+    <AdminOrderableShell>
+      <AdminOrderHeader
+        position={position}
+        total={total}
+        title={`Mensagem ${position} de ${total}`}
+        subtitle={preview}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+      />
       <Textarea
         rows={2}
         value={form.text}
         onChange={(e) => setForm({ ...form, text: e.target.value })}
         className="bg-white/5 rounded-xl border-white/5 font-script text-lg"
       />
-      <div className="flex items-center justify-between">
-        <Input
-          type="number"
-          value={form.sort_order}
-          onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
-          className="w-16 bg-white/5 rounded-lg border-white/5"
-        />
-        <div className="flex gap-2">
-          <Button size="sm" onClick={save} className="rounded-lg">
-            <Save className="h-4 w-4" />
-          </Button>
-          <Button size="sm" variant="ghost" onClick={remove} className="text-destructive rounded-lg">
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    </div>
+      <AdminOrderActions
+        onSave={save}
+        onRemove={remove}
+        saving={saving}
+        position={position}
+      />
+    </AdminOrderableShell>
   );
 }
 
@@ -2305,19 +2577,30 @@ function MemoriesEditor() {
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["memory_envelopes"] });
   const [seeding, setSeeding] = useState(false);
+  const sorted = useMemo(() => sortByOrder(data ?? []), [data]);
 
   async function add() {
-    const nextOrder = (data?.length ?? 0) + 1;
     const { error } = await supabase.from("memory_envelopes").insert({
       icon: "💌",
       icon_name: "Mail",
       title: "Novo envelope",
       message: "Sua mensagem especial aqui...",
       is_easter_egg: false,
-      sort_order: nextOrder,
+      sort_order: nextSortOrder(sorted),
     });
     if (error) toast.error(error.message);
     else refresh();
+  }
+
+  async function moveMemory(id: string, direction: "up" | "down") {
+    const next = swapInList(sorted, id, direction);
+    if (!next) return;
+    try {
+      await persistTableOrder("memory_envelopes", next);
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
+    }
   }
 
   async function seedDefaults() {
@@ -2344,14 +2627,14 @@ function MemoriesEditor() {
   const empty = (data ?? []).length === 0;
 
   return (
-    <div className="space-y-3">
-      <div className="rounded-2xl bg-white/5 p-4 text-sm text-muted-foreground">
+    <div className="space-y-4">
+      <AdminOrderHint>
         <p className="font-medium text-foreground">Capítulo 08 — Caixa de memórias</p>
         <p className="mt-1">
-          Envelopes que a pessoa toca para abrir mensagens curtas. O coração com <strong>?</strong> no
-          site é o easter egg fixo (5 toques).
+          Envelopes que a pessoa toca para abrir mensagens curtas. Use as setas para ordenar. O
+          coração com <strong>?</strong> no site é o easter egg fixo (5 toques).
         </p>
-      </div>
+      </AdminOrderHint>
       {empty && (
         <div className="glass rounded-2xl p-6 text-center">
           <Mail className="mx-auto h-8 w-8 text-muted-foreground/50" />
@@ -2361,9 +2644,19 @@ function MemoriesEditor() {
           </Button>
         </div>
       )}
-      {(data ?? []).map((m) => (
-        <MemoryRow key={m.id} m={m} onChange={refresh} />
-      ))}
+      <AdminOrderableGrid>
+        {sorted.map((m, index) => (
+          <MemoryRow
+            key={m.id}
+            m={m}
+            position={index + 1}
+            total={sorted.length}
+            onMoveUp={() => void moveMemory(m.id, "up")}
+            onMoveDown={() => void moveMemory(m.id, "down")}
+            onChange={refresh}
+          />
+        ))}
+      </AdminOrderableGrid>
       <Button onClick={add} variant="outline" className="w-full border-dashed rounded-xl py-8">
         <Plus className="h-4 w-4" /> <Mail className="h-4 w-4" /> Adicionar envelope
       </Button>
@@ -2371,10 +2664,30 @@ function MemoriesEditor() {
   );
 }
 
-function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void }) {
+function MemoryRow({
+  m,
+  position,
+  total,
+  onMoveUp,
+  onMoveDown,
+  onChange,
+}: {
+  m: MemoryEnvelope;
+  position: number;
+  total: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onChange: () => void;
+}) {
   const [form, setForm] = useState(m);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(m);
+  }, [m]);
 
   async function save() {
+    setSaving(true);
     const { error } = await supabase
       .from("memory_envelopes")
       .update({
@@ -2384,7 +2697,6 @@ function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void })
         is_easter_egg: form.is_easter_egg,
         is_locked: form.is_locked,
         unlock_at: form.unlock_at || null,
-        sort_order: form.sort_order,
       })
       .eq("id", m.id);
     if (error) toast.error(error.message);
@@ -2392,6 +2704,7 @@ function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void })
       toastRomanticSave("memories");
       onChange();
     }
+    setSaving(false);
   }
 
   async function remove() {
@@ -2402,9 +2715,15 @@ function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void })
   }
 
   return (
-    <div
-      className={`glass space-y-4 rounded-2xl p-4 ${form.is_easter_egg ? "ring-1 ring-accent/40" : ""}`}
-    >
+    <AdminOrderableShell className={form.is_easter_egg ? "ring-1 ring-accent/40" : ""}>
+      <AdminOrderHeader
+        position={position}
+        total={total}
+        title={`Envelope ${position} de ${total}`}
+        subtitle={form.title || "Sem título"}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+      />
       {form.is_easter_egg && (
         <p className="flex items-center gap-2 text-xs text-accent">
           <Heart className="h-3.5 w-3.5 fill-accent" /> Easter egg — não aparece na grade principal
@@ -2445,53 +2764,35 @@ function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void })
           className="bg-white/5 rounded-xl border-white/5"
         />
       )}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
-            <Switch
-              id={`easter-${m.id}`}
-              checked={form.is_easter_egg}
-              onCheckedChange={(is_easter_egg) => setForm({ ...form, is_easter_egg })}
-            />
-            <Label htmlFor={`easter-${m.id}`} className="text-sm">
-              Easter egg
-            </Label>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
-            <Switch
-              id={`locked-${m.id}`}
-              checked={form.is_locked}
-              onCheckedChange={(is_locked) => setForm({ ...form, is_locked })}
-            />
-            <Label htmlFor={`locked-${m.id}`} className="text-sm">
-              Bloqueado
-            </Label>
-          </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
+          <Switch
+            id={`easter-${m.id}`}
+            checked={form.is_easter_egg}
+            onCheckedChange={(is_easter_egg) => setForm({ ...form, is_easter_egg })}
+          />
+          <Label htmlFor={`easter-${m.id}`} className="text-sm">
+            Easter egg
+          </Label>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase text-muted-foreground">Ordem:</span>
-            <Input
-              type="number"
-              value={form.sort_order}
-              onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
-              className="w-16 bg-white/5 rounded-lg border-white/5"
-            />
-          </div>
-          <Button size="sm" onClick={save} className="rounded-lg">
-            <Save className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={remove}
-            className="text-muted-foreground hover:text-destructive rounded-lg"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
+          <Switch
+            id={`locked-${m.id}`}
+            checked={form.is_locked}
+            onCheckedChange={(is_locked) => setForm({ ...form, is_locked })}
+          />
+          <Label htmlFor={`locked-${m.id}`} className="text-sm">
+            Bloqueado
+          </Label>
         </div>
       </div>
-    </div>
+      <AdminOrderActions
+        onSave={save}
+        onRemove={remove}
+        saving={saving}
+        position={position}
+      />
+    </AdminOrderableShell>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { sortGalleryImages } from "@/lib/gallery-sort";
 
 export type TimelineEvent = {
   id: string;
@@ -77,6 +78,7 @@ export type GalleryImage = {
   location: string | null;
   taken_at: string | null;
   sort_order: number;
+  created_at?: string;
 };
 
 export type LoveNote = {
@@ -148,7 +150,7 @@ export function useGallery() {
         .select("*")
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return data;
+      return sortGalleryImages((data ?? []) as GalleryImage[]);
     },
   });
 }
