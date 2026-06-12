@@ -34,7 +34,73 @@ export type LogoExportContext = {
   bgColor?: string;
 };
 
-/** Reprocessa a logo em alta resolução proporcional ao QR exportado */
+function drawRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+}
+
+/**
+ * Foto no centro do QR com cantos arredondados, respiro branco e moldura sutil —
+ * combina com o estilo orgânico dos módulos.
+ */
+export async function fitImageToQrLogo(
+  source: string,
+  options: ImageFitOptions = {},
+): Promise<string> {
+  const size = options.size ?? 512;
+  const bgColor = options.bgColor ?? "#ffffff";
+
+  const photoScale = 0.84;
+  const photoSize = Math.round(size * photoScale);
+  const offset = Math.round((size - photoSize) / 2);
+  const radius = Math.round(photoSize * 0.13);
+
+  const photoDataUrl = await fitImageToSquare(source, {
+    ...options,
+    size: photoSize,
+    bgColor,
+  });
+  const photoImg = await loadImage(photoDataUrl);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas indisponível");
+
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.save();
+  ctx.shadowColor = "rgba(15, 5, 30, 0.1)";
+  ctx.shadowBlur = Math.max(2, Math.round(size * 0.018));
+  ctx.shadowOffsetY = Math.max(1, Math.round(size * 0.006));
+  drawRoundRect(ctx, offset, offset, photoSize, photoSize, radius);
+  ctx.fillStyle = bgColor;
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  drawRoundRect(ctx, offset, offset, photoSize, photoSize, radius);
+  ctx.clip();
+  drawImageSmooth(ctx, photoImg, offset, offset, photoSize, photoSize);
+  ctx.restore();
+
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.07)";
+  ctx.lineWidth = Math.max(1, Math.round(size * 0.0035));
+  drawRoundRect(ctx, offset, offset, photoSize, photoSize, radius);
+  ctx.stroke();
+
+  return canvasToSharpDataUrl(canvas);
+}
+
 /** Escala a logo do preview sem recortar de novo — mantém o enquadramento idêntico */
 export async function upscaleLogoSquare(logoUrl: string, targetSize: number): Promise<string> {
   if (!logoUrl) return "";
@@ -64,7 +130,7 @@ export async function resolveLogoForQrExport(
   const exportLogoDisplay = context.logoDisplaySize * (context.exportQrSize / designQrSize);
   const pixelSize = logoProcessPixelSize(context.exportQrSize, exportLogoDisplay);
 
-  return fitImageToSquare(logoSource, {
+  return fitImageToQrLogo(logoSource, {
     size: pixelSize,
     mode: context.logoFitMode ?? "cover",
     focalX: context.logoFocalX ?? 50,

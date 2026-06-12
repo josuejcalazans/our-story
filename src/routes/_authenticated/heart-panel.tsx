@@ -119,7 +119,7 @@ import {
 } from "@/lib/qr-saved";
 import type { Json } from "@/integrations/supabase/types";
 import {
-  fitImageToSquare,
+  fitImageToQrLogo,
   logoProcessPixelSize,
   MAX_LOGO_FILE_BYTES,
   readImageFileNormalized,
@@ -731,7 +731,7 @@ function SharePanel() {
     let cancelled = false;
     setLogoProcessing(true);
 
-    void fitImageToSquare(logoSource, {
+    void fitImageToQrLogo(logoSource, {
       size: logoProcessPixelSize(size, logoSize),
       mode: logoFitMode,
       focalX: logoFocalX,
@@ -1538,7 +1538,7 @@ function SharePanel() {
                   </button>
                 </div>
                 <p className="text-[10px] text-muted-foreground text-center max-w-[220px]">
-                  Preview quadrado — é assim que aparece no QR
+                  Preview — é assim que aparece no centro do QR
                 </p>
               </div>
             )}
