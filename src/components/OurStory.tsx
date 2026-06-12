@@ -353,21 +353,21 @@ function Timeline({
                   />
                 </div>
                 <article
-                  className={`glass w-full overflow-hidden rounded-2xl transition-all hover:shadow-glow sm:w-[calc(50%-3rem)] ${
+                  className={`group/timeline-card glass w-full overflow-hidden rounded-2xl transition-all hover:shadow-glow sm:w-[calc(50%-3rem)] ${
                     isLeft ? "sm:text-right" : ""
                   }`}
                 >
                   <button
                     type="button"
                     onClick={() => setOpen(isOpen ? null : i)}
-                    className="w-full cursor-pointer text-left"
+                    className="w-full cursor-pointer text-left sm:text-inherit"
                   >
                     {item.image_url && (
-                      <div className="h-48 w-full overflow-hidden">
+                      <div className="flex max-h-[min(70vw,22rem)] w-full items-center justify-center overflow-hidden bg-black/20">
                         <img
                           src={item.image_url}
                           alt={item.title}
-                          className="h-full w-full object-cover transition-transform duration-500 hover:scale-110"
+                          className="max-h-[min(70vw,22rem)] w-full object-contain transition-transform duration-500 group-hover/timeline-card:scale-[1.02]"
                         />
                       </div>
                     )}
