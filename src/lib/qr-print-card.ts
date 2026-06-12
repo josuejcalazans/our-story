@@ -294,7 +294,7 @@ export async function renderPrintCardBackCanvas(
 
   drawCenteredText(
     ctx,
-    "VERSO",
+    "",
     180,
     "600 13px system-ui, sans-serif",
     "rgba(168, 85, 247, 0.45)",
