@@ -119,11 +119,13 @@ export async function fitImageToSquare(
 }
 
 export async function readImageFileNormalized(file: File): Promise<string> {
+  const { prepareImageForUpload } = await import("@/lib/prepare-upload-image");
+  const ready = await prepareImageForUpload(file);
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => resolve(e.target?.result as string);
     reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(ready);
   });
   return normalizeImageSource(dataUrl);
 }
