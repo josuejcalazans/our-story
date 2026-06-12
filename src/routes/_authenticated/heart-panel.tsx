@@ -28,6 +28,7 @@ import {
   Undo2,
   Shapes,
   Maximize,
+  Printer,
   Shield,
   Image,
   Link,
@@ -67,6 +68,7 @@ import { Label } from "@/components/ui/label";
 import QRStylePicker from "@/components/QRStylePicker";
 import { useStyledQRCode } from "@/hooks/use-styled-qr";
 import { canvasToBlob, downloadBlob, EXPORT_RESOLUTIONS, renderExportCanvas, type ExportResolution } from "@/lib/qr-export";
+import { renderPrintCardCanvas } from "@/lib/qr-print-card";
 import {
   fetchLogoAsDataUrl,
   readImageFileAsDataUrl,
@@ -451,6 +453,7 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
 
 /* -------------------- Share Panel -------------------- */
 function SharePanel() {
+  const { data: settings } = useSettings();
   const [url, setUrl] = useState("");
   const [fgColor, setFgColor] = useState("#eb5e8e");
   const [bgColor, setBgColor] = useState("#ffffff");
@@ -476,6 +479,7 @@ function SharePanel() {
   const [exportResolution, setExportResolution] = useState<ExportResolution>("preview");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [isPrintingCard, setIsPrintingCard] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const qrCanvasRef = useRef<HTMLDivElement>(null);
@@ -667,6 +671,25 @@ function SharePanel() {
     }
   }, [url, styledQROptions, includeMargin, borderMargin, exportResolution, isExporting, saveToHistory]);
 
+  const downloadPrintCard = useCallback(async () => {
+    if (!url.trim() || isPrintingCard) return;
+
+    setIsPrintingCard(true);
+    try {
+      const margin = includeMargin ? borderMargin : 0;
+      const cardCanvas = await renderPrintCardCanvas(styledQROptions, margin, {
+        herName: settings?.her_name,
+      });
+      const blob = await canvasToBlob(cardCanvas);
+      downloadBlob(blob, `cartao-nossa-historia-${Date.now()}.png`);
+      toast.success("Cartão para impressão baixado!");
+    } catch {
+      toast.error("Erro ao gerar cartão. Tente novamente.");
+    } finally {
+      setIsPrintingCard(false);
+    }
+  }, [url, styledQROptions, includeMargin, borderMargin, isPrintingCard, settings?.her_name]);
+
   const restoreItem = (item: HistoryItem) => {
     setFgColor(item.fgColor);
     setBgColor(item.bgColor);
@@ -723,19 +746,36 @@ function SharePanel() {
           </Button>
         </div>
 
-        <div className="flex w-full gap-3 max-w-sm">
+        <div className="flex w-full flex-col gap-3 max-w-sm">
+          <Button
+            onClick={downloadPrintCard}
+            disabled={isPrintingCard || isExporting}
+            className="h-12 rounded-xl gap-2 shadow-glow"
+          >
+            {isPrintingCard ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Printer className="h-4 w-4" />
+            )}
+            Baixar cartão para impressão
+          </Button>
           <Button
             onClick={downloadQR}
-            disabled={isExporting}
-            className="flex-1 h-12 rounded-xl gap-2 shadow-glow"
+            disabled={isExporting || isPrintingCard}
+            variant="outline"
+            className="h-11 rounded-xl gap-2 border-white/10"
           >
             {isExporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Download className="h-4 w-4" />
             )}
-            Baixar PNG
+            Só o QR Code (PNG)
           </Button>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Cartão A6 em alta resolução — imprima em papel grosso ou cartolina e
+            entregue como presente físico.
+          </p>
         </div>
       </div>
 
