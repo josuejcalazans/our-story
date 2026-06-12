@@ -15,7 +15,7 @@ export type ImageFitOptions = {
 };
 
 const MAX_IMAGE_EDGE = 2400;
-export const MAX_LOGO_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_LOGO_FILE_BYTES = 20 * 1024 * 1024;
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
