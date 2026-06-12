@@ -41,39 +41,82 @@ export function createExportCanvas(
   return exportCanvas;
 }
 
-async function waitForQRRender(hasLogo: boolean) {
-  await new Promise<void>((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
+function cloneCanvas(source: HTMLCanvasElement): HTMLCanvasElement {
+  const clone = document.createElement("canvas");
+  clone.width = source.width;
+  clone.height = source.height;
+  const ctx = clone.getContext("2d");
+  if (!ctx) throw new Error("Could not clone QR canvas");
+  ctx.drawImage(source, 0, 0);
+  return clone;
+}
+
+function scaleCanvas(source: HTMLCanvasElement, size: number): HTMLCanvasElement {
+  const scaled = document.createElement("canvas");
+  scaled.width = size;
+  scaled.height = size;
+  const ctx = scaled.getContext("2d");
+  if (!ctx) throw new Error("Could not scale QR canvas");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(source, 0, 0, size, size);
+  return scaled;
+}
+
+async function blobToCanvas(blob: Blob, size: number): Promise<HTMLCanvasElement> {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not create QR canvas context");
+
+  if ("createImageBitmap" in window) {
+    const bitmap = await createImageBitmap(blob);
+    ctx.drawImage(bitmap, 0, 0, size, size);
+    bitmap.close();
+    return canvas;
+  }
+
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Failed to load QR image"));
+      image.src = url;
     });
-  });
-  if (hasLogo) {
-    await new Promise<void>((resolve) => setTimeout(resolve, 150));
+    ctx.drawImage(img, 0, 0, size, size);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }
 
 export async function renderQRSourceCanvas(
   options: StyledQROptions,
   qrPixelSize: number,
+  fallbackCanvas?: HTMLCanvasElement | null,
 ): Promise<HTMLCanvasElement> {
-  const container = document.createElement("div");
-  container.style.position = "fixed";
-  container.style.left = "-9999px";
-  container.style.top = "-9999px";
-  document.body.appendChild(container);
+  if (!options.data.trim()) {
+    throw new Error("QR data is empty");
+  }
 
   try {
     const qr = new QRCodeStyling(
       buildQRStylingConfig({ ...options, size: qrPixelSize }),
     );
-    qr.append(container);
-    await waitForQRRender(Boolean(options.logoUrl));
-
-    const canvas = container.querySelector("canvas");
-    if (!canvas) throw new Error("QR canvas not found");
-    return canvas;
-  } finally {
-    document.body.removeChild(container);
+    const blob = await qr.getRawData("png");
+    if (!blob || !(blob instanceof Blob)) {
+      throw new Error("QR canvas not found");
+    }
+    return blobToCanvas(blob, qrPixelSize);
+  } catch (error) {
+    if (fallbackCanvas?.width && fallbackCanvas.height) {
+      return fallbackCanvas.width === qrPixelSize
+        ? cloneCanvas(fallbackCanvas)
+        : scaleCanvas(fallbackCanvas, qrPixelSize);
+    }
+    throw error;
   }
 }
 
@@ -86,8 +129,8 @@ export async function renderExportCanvas(
   const resolutionConfig = EXPORT_RESOLUTIONS.find((r) => r.value === resolution);
   const outputSize = resolutionConfig?.size ?? null;
 
-  if (resolution === "preview" && previewCanvas) {
-    return createExportCanvas(previewCanvas, options.bgColor, margin);
+  if (resolution === "preview" && previewCanvas?.width && previewCanvas.height) {
+    return createExportCanvas(cloneCanvas(previewCanvas), options.bgColor, margin);
   }
 
   const qrPixelSize = outputSize ? outputSize - margin * 2 : options.size;

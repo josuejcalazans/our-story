@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { sortGalleryImages } from "@/lib/gallery-sort";
+import { parseQRSavedConfig, type QRSavedConfig } from "@/lib/qr-saved";
 import { sortTimelineEvents } from "@/lib/timeline-sort";
 
 export type TimelineEvent = {
@@ -43,6 +44,11 @@ export type SiteSettings = {
   print_card_tagline: string;
   print_card_scan_line: string;
   print_card_back_message: string;
+  qr_config: QRSavedConfig | null;
+  saved_qr_image_url: string;
+  saved_qr_card_sheet_url: string;
+  saved_qr_card_front_url: string;
+  saved_qr_updated_at: string | null;
   theme_mode: ThemeMode;
   page_gate_enabled: boolean;
   access_date: string | null;
@@ -134,6 +140,11 @@ export function useSettings() {
         print_card_tagline: data.print_card_tagline ?? "Algo feito só para você",
         print_card_scan_line: data.print_card_scan_line ?? "Escaneie para abrir nossa história",
         print_card_back_message: data.print_card_back_message ?? "",
+        qr_config: parseQRSavedConfig(data.qr_config),
+        saved_qr_image_url: data.saved_qr_image_url ?? "",
+        saved_qr_card_sheet_url: data.saved_qr_card_sheet_url ?? "",
+        saved_qr_card_front_url: data.saved_qr_card_front_url ?? "",
+        saved_qr_updated_at: data.saved_qr_updated_at ?? null,
         theme_mode: toThemeMode(data.theme_mode),
         page_gate_enabled: Boolean(data.page_gate_enabled),
         access_date: data.access_date ?? null,

@@ -182,9 +182,14 @@ export async function renderPrintCardFrontCanvas(
   options: StyledQROptions,
   qrMargin: number,
   layout: PrintCardLayout = {},
+  previewCanvas?: HTMLCanvasElement | null,
 ): Promise<HTMLCanvasElement> {
   const qrSize = 520;
-  const sourceQr = await renderQRSourceCanvas({ ...options, size: qrSize }, qrSize);
+  const sourceQr = await renderQRSourceCanvas(
+    { ...options, size: qrSize },
+    qrSize,
+    previewCanvas,
+  );
   const qrWithBorder = createExportCanvas(sourceQr, options.bgColor, qrMargin);
 
   const canvas = document.createElement("canvas");
@@ -345,8 +350,9 @@ export async function renderPrintCardSheetCanvas(
   options: StyledQROptions,
   qrMargin: number,
   layout: PrintCardLayout = {},
+  previewCanvas?: HTMLCanvasElement | null,
 ): Promise<HTMLCanvasElement> {
-  const front = await renderPrintCardFrontCanvas(options, qrMargin, layout);
+  const front = await renderPrintCardFrontCanvas(options, qrMargin, layout, previewCanvas);
   const back = await renderPrintCardBackCanvas(layout);
 
   const gap = 80;

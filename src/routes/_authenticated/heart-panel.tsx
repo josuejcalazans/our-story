@@ -111,6 +111,14 @@ import {
   renderPrintCardSheetCanvas,
 } from "@/lib/qr-print-card";
 import {
+  ensureLogoStorageUrl,
+  formatSavedQrDate,
+  QR_STORAGE_PATHS,
+  uploadQrAsset,
+  downloadRemoteAsset,
+} from "@/lib/qr-saved";
+import type { Json } from "@/integrations/supabase/types";
+import {
   fitImageToSquare,
   logoProcessPixelSize,
   MAX_LOGO_FILE_BYTES,
@@ -672,8 +680,13 @@ function SharePanel() {
   const [cardScanLine, setCardScanLine] = useState("Escaneie para abrir nossa história");
   const [cardBackMessage, setCardBackMessage] = useState("");
   const [savingCardText, setSavingCardText] = useState(false);
+  const [isSavingQR, setIsSavingQR] = useState(false);
+  const [savedQrImageUrl, setSavedQrImageUrl] = useState<string | null>(null);
+  const [savedCardSheetUrl, setSavedCardSheetUrl] = useState<string | null>(null);
+  const [savedQrAt, setSavedQrAt] = useState<string | null>(null);
 
   const qrCanvasRef = useRef<HTMLDivElement>(null);
+  const loadedSavedConfigRef = useRef(false);
 
   useEffect(() => {
     setUrl(window.location.origin);
@@ -686,6 +699,37 @@ function SharePanel() {
     setCardTagline(settings.print_card_tagline || "Algo feito só para você");
     setCardScanLine(settings.print_card_scan_line || "Escaneie para abrir nossa história");
     setCardBackMessage(settings.print_card_back_message || "");
+    setSavedQrImageUrl(settings.saved_qr_image_url || null);
+    setSavedCardSheetUrl(settings.saved_qr_card_sheet_url || null);
+    setSavedQrAt(settings.saved_qr_updated_at);
+
+    if (loadedSavedConfigRef.current || !settings.qr_config) return;
+    loadedSavedConfigRef.current = true;
+
+    const config = settings.qr_config;
+    setUrl(config.url);
+    setFgColor(config.fgColor);
+    setBgColor(config.bgColor);
+    setSize(config.size);
+    setLevel(config.level);
+    setLogoSize(config.logoSize);
+    setLogoFitMode(config.logoFitMode);
+    setLogoFocalX(config.logoFocalX);
+    setLogoFocalY(config.logoFocalY);
+    setLogoZoom(config.logoZoom);
+    setLogoExcavate(config.logoExcavate);
+    setDotStyle(config.dotStyle);
+    setCornerSquareStyle(config.cornerSquareStyle);
+    setCornerDotStyle(config.cornerDotStyle);
+    setIncludeMargin(config.includeMargin);
+    setBorderMargin(config.borderMargin);
+    if (config.logoUrl) {
+      setLogoUrl(config.logoUrl);
+      setLogoSource(config.logoUrl);
+      setLogoPreview(config.logoUrl);
+      setLogoInput("");
+      setLogoOriginalUrl(null);
+    }
   }, [settings]);
 
   useEffect(() => {
@@ -919,7 +963,13 @@ function SharePanel() {
     setIsPrintingCard(true);
     try {
       const margin = includeMargin ? borderMargin : 0;
-      const sheet = await renderPrintCardSheetCanvas(styledQROptions, margin, printCardLayout);
+      const previewCanvas = qrCanvasRef.current?.querySelector("canvas") ?? null;
+      const sheet = await renderPrintCardSheetCanvas(
+        styledQROptions,
+        margin,
+        printCardLayout,
+        previewCanvas,
+      );
       const blob = await canvasToBlob(sheet);
       downloadBlob(blob, `cartao-frente-verso-${Date.now()}.png`);
       toast.success("Cartão frente + verso baixado!");
@@ -935,7 +985,13 @@ function SharePanel() {
     setIsPrintingCard(true);
     try {
       const margin = includeMargin ? borderMargin : 0;
-      const canvas = await renderPrintCardFrontCanvas(styledQROptions, margin, printCardLayout);
+      const previewCanvas = qrCanvasRef.current?.querySelector("canvas") ?? null;
+      const canvas = await renderPrintCardFrontCanvas(
+        styledQROptions,
+        margin,
+        printCardLayout,
+        previewCanvas,
+      );
       downloadBlob(await canvasToBlob(canvas), `cartao-frente-${Date.now()}.png`);
       toast.success("Frente baixada!");
     } catch {
@@ -976,6 +1032,132 @@ function SharePanel() {
     }
     setSavingCardText(false);
   }, [cardTagline, cardScanLine, cardBackMessage, qc]);
+
+  const saveQRCode = useCallback(async () => {
+    if (!url.trim() || isSavingQR) return;
+
+    setIsSavingQR(true);
+    try {
+      const margin = includeMargin ? borderMargin : 0;
+      const storedLogoUrl = await ensureLogoStorageUrl(logoUrl);
+      const savedAt = new Date().toISOString();
+      const optionsWithStoredLogo = { ...styledQROptions, logoUrl: storedLogoUrl };
+      const previewCanvas = qrCanvasRef.current?.querySelector("canvas") ?? null;
+
+      const config = {
+        url,
+        fgColor,
+        bgColor,
+        size,
+        level,
+        logoUrl: storedLogoUrl,
+        logoSize,
+        logoFitMode,
+        logoFocalX,
+        logoFocalY,
+        logoZoom,
+        logoExcavate,
+        dotStyle,
+        cornerSquareStyle,
+        cornerDotStyle,
+        includeMargin,
+        borderMargin,
+        savedAt,
+      };
+
+      const [qrExport, cardSheet, cardFront] = await Promise.all([
+        renderExportCanvas(optionsWithStoredLogo, margin, "fhd"),
+        renderPrintCardSheetCanvas(optionsWithStoredLogo, margin, printCardLayout, previewCanvas),
+        renderPrintCardFrontCanvas(optionsWithStoredLogo, margin, printCardLayout, previewCanvas),
+      ]);
+
+      const [qrImageUrl, cardSheetUrl, cardFrontUrl] = await Promise.all([
+        uploadQrAsset(QR_STORAGE_PATHS.qrcode, await canvasToBlob(qrExport)),
+        uploadQrAsset(QR_STORAGE_PATHS.cardSheet, await canvasToBlob(cardSheet)),
+        uploadQrAsset(QR_STORAGE_PATHS.cardFront, await canvasToBlob(cardFront)),
+      ]);
+
+      const { error } = await supabase
+        .from("site_settings")
+        .update({
+          qr_config: config as Json,
+          saved_qr_image_url: qrImageUrl,
+          saved_qr_card_sheet_url: cardSheetUrl,
+          saved_qr_card_front_url: cardFrontUrl,
+          saved_qr_updated_at: savedAt,
+          print_card_tagline: cardTagline,
+          print_card_scan_line: cardScanLine,
+          print_card_back_message: cardBackMessage,
+        })
+        .eq("id", 1);
+
+      if (error) throw error;
+
+      setSavedQrImageUrl(qrImageUrl);
+      setSavedCardSheetUrl(cardSheetUrl);
+      setSavedQrAt(savedAt);
+
+      if (storedLogoUrl && storedLogoUrl !== logoUrl) {
+        setLogoUrl(storedLogoUrl);
+        setLogoSource(storedLogoUrl);
+        setLogoPreview(storedLogoUrl);
+      }
+
+      saveToHistory();
+      toastRomanticSave("settings");
+      qc.invalidateQueries({ queryKey: ["site_settings"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao salvar QR Code");
+    } finally {
+      setIsSavingQR(false);
+    }
+  }, [
+    url,
+    isSavingQR,
+    includeMargin,
+    borderMargin,
+    logoUrl,
+    styledQROptions,
+    printCardLayout,
+    fgColor,
+    bgColor,
+    size,
+    level,
+    logoSize,
+    logoFitMode,
+    logoFocalX,
+    logoFocalY,
+    logoZoom,
+    logoExcavate,
+    dotStyle,
+    cornerSquareStyle,
+    cornerDotStyle,
+    cardTagline,
+    cardScanLine,
+    cardBackMessage,
+    saveToHistory,
+    qc,
+  ]);
+
+  const downloadSavedQR = useCallback(async () => {
+    if (!savedQrImageUrl) return;
+    try {
+      await downloadRemoteAsset(savedQrImageUrl, `qrcode-salvo-${Date.now()}.png`);
+      toast.success("QR salvo baixado!");
+    } catch {
+      toast.error("Erro ao baixar QR salvo");
+    }
+  }, [savedQrImageUrl]);
+
+  const downloadSavedCard = useCallback(async () => {
+    if (!savedCardSheetUrl) return;
+    try {
+      await downloadRemoteAsset(savedCardSheetUrl, `cartao-salvo-${Date.now()}.png`);
+      toast.success("Cartão salvo baixado!");
+    } catch {
+      toast.error("Erro ao baixar cartão salvo");
+    }
+  }, [savedCardSheetUrl]);
 
   const restoreItem = (item: HistoryItem) => {
     setFgColor(item.fgColor);
@@ -1035,6 +1217,59 @@ function SharePanel() {
         </div>
 
         <div className="flex w-full flex-col gap-3 max-w-md">
+          <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4 text-left space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                QR Code salvo
+              </p>
+              {savedQrAt && (
+                <span className="text-[10px] text-accent/80">
+                  {formatSavedQrDate(savedQrAt)}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {savedQrImageUrl
+                ? "Seu QR e cartão ficam guardados no servidor. Baixe de novo sem regenerar."
+                : "Salve o design atual para reutilizar depois, em qualquer dispositivo."}
+            </p>
+            <Button
+              type="button"
+              disabled={isSavingQR || isExporting || isPrintingCard || !url.trim()}
+              onClick={() => void saveQRCode()}
+              className="w-full h-11 rounded-xl gap-2 shadow-glow"
+            >
+              {isSavingQR ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Salvar QR Code
+            </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!savedQrImageUrl || isSavingQR}
+                onClick={() => void downloadSavedQR()}
+                className="h-10 rounded-xl border-white/10 text-xs gap-1.5"
+              >
+                <Download className="h-3.5 w-3.5" />
+                QR salvo
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!savedCardSheetUrl || isSavingQR}
+                onClick={() => void downloadSavedCard()}
+                className="h-10 rounded-xl border-white/10 text-xs gap-1.5"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Cartão salvo
+              </Button>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left space-y-3">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
               Textos do cartão
@@ -1144,7 +1379,7 @@ function SharePanel() {
               Logo
             </TabsTrigger>
             <TabsTrigger value="history" className="text-xs rounded-lg">
-              Histórico
+              Recentes
             </TabsTrigger>
           </TabsList>
 
