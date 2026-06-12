@@ -113,12 +113,17 @@ export type Database = {
       site_settings: {
         Row: {
           access_date: string | null
+          ending_audio_url: string
           final_message: string
           her_name: string
           hidden_video_url: string
           id: number
           love_letter: string
+          music_url: string
           page_gate_enabled: boolean
+          print_card_back_message: string
+          print_card_scan_line: string
+          print_card_tagline: string
           relationship_start: string
           secret_message: string
           theme_mode: string | null
@@ -126,12 +131,17 @@ export type Database = {
         }
         Insert: {
           access_date?: string | null
+          ending_audio_url?: string
           final_message?: string
           her_name?: string
           hidden_video_url?: string
           id?: number
           love_letter?: string
+          music_url?: string
           page_gate_enabled?: boolean
+          print_card_back_message?: string
+          print_card_scan_line?: string
+          print_card_tagline?: string
           relationship_start?: string
           secret_message?: string
           theme_mode?: string | null
@@ -139,12 +149,17 @@ export type Database = {
         }
         Update: {
           access_date?: string | null
+          ending_audio_url?: string
           final_message?: string
           her_name?: string
           hidden_video_url?: string
           id?: number
           love_letter?: string
+          music_url?: string
           page_gate_enabled?: boolean
+          print_card_back_message?: string
+          print_card_scan_line?: string
+          print_card_tagline?: string
           relationship_start?: string
           secret_message?: string
           theme_mode?: string | null

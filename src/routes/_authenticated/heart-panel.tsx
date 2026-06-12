@@ -28,6 +28,7 @@ import {
   Undo2,
   Shapes,
   Maximize,
+  Printer,
   Shield,
   Image,
   Link,
@@ -42,12 +43,14 @@ import {
   useGallery,
   usePlaces,
   useMemoryEnvelopes,
+  useLoveNotes,
   type TimelineEvent,
   type Stat,
   type SiteSettings,
   type GalleryImage,
   type Place,
   type MemoryEnvelope,
+  type LoveNote,
 } from "@/lib/use-site-content";
 import IconPicker from "@/components/IconPicker";
 import { GatePasswordPreview, StoryDatePicker, StoryDateTextPicker } from "@/components/StoryDate";
@@ -66,8 +69,18 @@ import QRStylePicker from "@/components/QRStylePicker";
 import { useStyledQRCode } from "@/hooks/use-styled-qr";
 import { canvasToBlob, downloadBlob, EXPORT_RESOLUTIONS, renderExportCanvas, type ExportResolution } from "@/lib/qr-export";
 import {
+  renderPrintCardBackCanvas,
+  renderPrintCardFrontCanvas,
+  renderPrintCardSheetCanvas,
+} from "@/lib/qr-print-card";
+import {
+  fitImageToSquare,
+  MAX_LOGO_FILE_BYTES,
+  readImageFileNormalized,
+  type ImageFitMode,
+} from "@/lib/image-fit";
+import {
   fetchLogoAsDataUrl,
-  readImageFileAsDataUrl,
   removeLogoBackground,
 } from "@/lib/qr-logo";
 import {
@@ -115,7 +128,7 @@ type HistoryItem = {
   createdAt: number;
 };
 
-const ADMIN_TABS = ["timeline", "stats", "places", "gallery", "memories", "letter", "share"] as const;
+const ADMIN_TABS = ["timeline", "stats", "places", "gallery", "memories", "notes", "letter", "share"] as const;
 
 const adminSearchSchema = z.object({
   tab: z.enum(ADMIN_TABS).optional().default("timeline"),
@@ -244,6 +257,9 @@ function AdminPage() {
             <TabsTrigger value="memories" className="rounded-lg text-xs sm:text-sm">
               Memórias
             </TabsTrigger>
+            <TabsTrigger value="notes" className="rounded-lg text-xs sm:text-sm">
+              Mensagens
+            </TabsTrigger>
             <TabsTrigger value="letter" className="rounded-lg text-xs sm:text-sm">
               Configurações
             </TabsTrigger>
@@ -265,6 +281,9 @@ function AdminPage() {
           </TabsContent>
           <TabsContent value="memories" className="mt-6">
             <MemoriesEditor />
+          </TabsContent>
+          <TabsContent value="notes" className="mt-6">
+            <LoveNotesEditor />
           </TabsContent>
           <TabsContent value="letter" className="mt-6">
             <SettingsEditor />
@@ -351,6 +370,10 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
       .update({
         image_url: form.image_url,
         caption: form.caption,
+        title: form.title,
+        description: form.description,
+        location: form.location,
+        taken_at: form.taken_at || null,
         sort_order: form.sort_order,
       })
       .eq("id", img.id);
@@ -376,11 +399,38 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
       />
 
       <Input
-        placeholder="Legenda (opcional)"
+        placeholder="Título"
+        value={form.title || ""}
+        onChange={(e) => setForm({ ...form, title: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <Input
+        placeholder="Legenda curta (opcional)"
         value={form.caption || ""}
         onChange={(e) => setForm({ ...form, caption: e.target.value })}
         className="bg-white/5 rounded-xl border-white/5"
       />
+      <Textarea
+        rows={2}
+        placeholder="Descrição (opcional)"
+        value={form.description || ""}
+        onChange={(e) => setForm({ ...form, description: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5"
+      />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Input
+          placeholder="Local"
+          value={form.location || ""}
+          onChange={(e) => setForm({ ...form, location: e.target.value })}
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+        <Input
+          type="date"
+          value={form.taken_at || ""}
+          onChange={(e) => setForm({ ...form, taken_at: e.target.value })}
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+      </div>
 
       <div className="flex items-center justify-between pt-2 border-t border-white/5">
         <div className="flex gap-2">
@@ -412,15 +462,23 @@ function GalleryRow({ img, onChange }: { img: GalleryImage; onChange: () => void
 
 /* -------------------- Share Panel -------------------- */
 function SharePanel() {
+  const { data: settings } = useSettings();
+  const qc = useQueryClient();
   const [url, setUrl] = useState("");
   const [fgColor, setFgColor] = useState("#eb5e8e");
   const [bgColor, setBgColor] = useState("#ffffff");
   const [size, setSize] = useState(280);
   const [level, setLevel] = useState<ECLevel>("H");
+  const [logoSource, setLogoSource] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoInput, setLogoInput] = useState("");
-  const [logoSize, setLogoSize] = useState(50);
+  const [logoSize, setLogoSize] = useState(72);
+  const [logoFitMode, setLogoFitMode] = useState<ImageFitMode>("cover");
+  const [logoFocalX, setLogoFocalX] = useState(50);
+  const [logoFocalY, setLogoFocalY] = useState(42);
+  const [logoZoom, setLogoZoom] = useState(108);
+  const [logoProcessing, setLogoProcessing] = useState(false);
   const [logoExcavate, setLogoExcavate] = useState(true);
   const [logoOriginalUrl, setLogoOriginalUrl] = useState<string | null>(null);
   const [removingBg, setRemovingBg] = useState(false);
@@ -437,7 +495,12 @@ function SharePanel() {
   const [exportResolution, setExportResolution] = useState<ExportResolution>("preview");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isExporting, setIsExporting] = useState(false);
+  const [isPrintingCard, setIsPrintingCard] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [cardTagline, setCardTagline] = useState("Algo feito só para você");
+  const [cardScanLine, setCardScanLine] = useState("Escaneie para abrir nossa história");
+  const [cardBackMessage, setCardBackMessage] = useState("");
+  const [savingCardText, setSavingCardText] = useState(false);
 
   const qrCanvasRef = useRef<HTMLDivElement>(null);
 
@@ -447,6 +510,48 @@ function SharePanel() {
     if (raw) setHistory(JSON.parse(raw));
   }, []);
 
+  useEffect(() => {
+    if (!settings) return;
+    setCardTagline(settings.print_card_tagline || "Algo feito só para você");
+    setCardScanLine(settings.print_card_scan_line || "Escaneie para abrir nossa história");
+    setCardBackMessage(settings.print_card_back_message || "");
+  }, [settings]);
+
+  useEffect(() => {
+    if (!logoSource) {
+      setLogoUrl("");
+      return;
+    }
+
+    let cancelled = false;
+    setLogoProcessing(true);
+
+    void fitImageToSquare(logoSource, {
+      size: 640,
+      mode: logoFitMode,
+      focalX: logoFocalX,
+      focalY: logoFocalY,
+      zoom: logoZoom / 100,
+      bgColor,
+    })
+      .then((processed) => {
+        if (!cancelled) {
+          setLogoUrl(processed);
+          setLogoPreview(processed);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Erro ao ajustar a foto");
+      })
+      .finally(() => {
+        if (!cancelled) setLogoProcessing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [logoSource, logoFitMode, logoFocalX, logoFocalY, logoZoom, bgColor]);
+
   const handleLogoFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -454,16 +559,15 @@ function SharePanel() {
       toast.error("Envie um arquivo de imagem");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("A imagem deve ter menos de 2MB");
+    if (file.size > MAX_LOGO_FILE_BYTES) {
+      toast.error("A imagem deve ter menos de 10MB");
       return;
     }
     try {
-      const result = await readImageFileAsDataUrl(file);
-      setLogoUrl(result);
-      setLogoPreview(result);
+      const result = await readImageFileNormalized(file);
+      setLogoSource(result);
       setLogoOriginalUrl(null);
-      toast.success("Logo enviada!");
+      toast.success("Foto enviada! Ajuste o enquadramento abaixo.");
     } catch {
       toast.error("Erro ao ler a imagem");
     }
@@ -472,23 +576,22 @@ function SharePanel() {
   const handleLogoUrlChange = useCallback(async (value: string) => {
     setLogoInput(value);
     if (!value) {
+      setLogoSource("");
       setLogoUrl("");
       setLogoPreview(null);
       return;
     }
     if (value.startsWith("data:")) {
-      setLogoUrl(value);
-      setLogoPreview(value);
+      setLogoSource(value);
       return;
     }
     setLogoPreview(value);
     setLogoUrl("");
     try {
       const dataUrl = await fetchLogoAsDataUrl(value);
-      setLogoUrl(dataUrl);
-      setLogoPreview(dataUrl);
+      setLogoSource(dataUrl);
       setLogoOriginalUrl(null);
-      toast.success("Logo carregada!");
+      toast.success("Foto carregada!");
     } catch {
       setLogoPreview(null);
       toast.error("Não foi possível carregar. Tente fazer upload do arquivo.");
@@ -496,6 +599,7 @@ function SharePanel() {
   }, []);
 
   const clearLogo = useCallback(() => {
+    setLogoSource("");
     setLogoUrl("");
     setLogoInput("");
     setLogoPreview(null);
@@ -504,28 +608,37 @@ function SharePanel() {
   }, []);
 
   const handleRemoveLogoBackground = useCallback(async () => {
-    if (!logoUrl) return;
+    const source = logoSource || logoUrl;
+    if (!source) return;
     setRemovingBg(true);
     try {
-      const out = await removeLogoBackground(logoUrl);
-      setLogoOriginalUrl((prev) => prev ?? logoUrl);
-      setLogoUrl(out);
-      setLogoPreview(out);
+      const out = await removeLogoBackground(source);
+      setLogoOriginalUrl((prev) => prev ?? source);
+      setLogoSource(out);
       toast.success("Fundo removido");
     } catch {
       toast.error("Não foi possível remover o fundo");
     } finally {
       setRemovingBg(false);
     }
-  }, [logoUrl]);
+  }, [logoSource, logoUrl]);
 
   const restoreLogoBackground = useCallback(() => {
     if (!logoOriginalUrl) return;
-    setLogoUrl(logoOriginalUrl);
-    setLogoPreview(logoOriginalUrl);
+    setLogoSource(logoOriginalUrl);
     setLogoOriginalUrl(null);
-    toast.success("Logo original restaurada");
+    toast.success("Foto original restaurada");
   }, [logoOriginalUrl]);
+
+  const printCardLayout = useMemo(
+    () => ({
+      herName: settings?.her_name,
+      tagline: cardTagline,
+      scanLine: cardScanLine,
+      backMessage: cardBackMessage,
+    }),
+    [settings?.her_name, cardTagline, cardScanLine, cardBackMessage],
+  );
 
   const styledQROptions = useMemo(
     () => ({
@@ -628,12 +741,77 @@ function SharePanel() {
     }
   }, [url, styledQROptions, includeMargin, borderMargin, exportResolution, isExporting, saveToHistory]);
 
+  const downloadPrintCard = useCallback(async () => {
+    if (!url.trim() || isPrintingCard) return;
+
+    setIsPrintingCard(true);
+    try {
+      const margin = includeMargin ? borderMargin : 0;
+      const sheet = await renderPrintCardSheetCanvas(styledQROptions, margin, printCardLayout);
+      const blob = await canvasToBlob(sheet);
+      downloadBlob(blob, `cartao-frente-verso-${Date.now()}.png`);
+      toast.success("Cartão frente + verso baixado!");
+    } catch {
+      toast.error("Erro ao gerar cartão. Tente novamente.");
+    } finally {
+      setIsPrintingCard(false);
+    }
+  }, [url, styledQROptions, includeMargin, borderMargin, isPrintingCard, printCardLayout]);
+
+  const downloadPrintCardFront = useCallback(async () => {
+    if (!url.trim() || isPrintingCard) return;
+    setIsPrintingCard(true);
+    try {
+      const margin = includeMargin ? borderMargin : 0;
+      const canvas = await renderPrintCardFrontCanvas(styledQROptions, margin, printCardLayout);
+      downloadBlob(await canvasToBlob(canvas), `cartao-frente-${Date.now()}.png`);
+      toast.success("Frente baixada!");
+    } catch {
+      toast.error("Erro ao gerar frente.");
+    } finally {
+      setIsPrintingCard(false);
+    }
+  }, [url, styledQROptions, includeMargin, borderMargin, isPrintingCard, printCardLayout]);
+
+  const downloadPrintCardBack = useCallback(async () => {
+    if (isPrintingCard) return;
+    setIsPrintingCard(true);
+    try {
+      const canvas = await renderPrintCardBackCanvas(printCardLayout);
+      downloadBlob(await canvasToBlob(canvas), `cartao-verso-${Date.now()}.png`);
+      toast.success("Verso baixado!");
+    } catch {
+      toast.error("Erro ao gerar verso.");
+    } finally {
+      setIsPrintingCard(false);
+    }
+  }, [isPrintingCard, printCardLayout]);
+
+  const savePrintCardTexts = useCallback(async () => {
+    setSavingCardText(true);
+    const { error } = await supabase
+      .from("site_settings")
+      .update({
+        print_card_tagline: cardTagline,
+        print_card_scan_line: cardScanLine,
+        print_card_back_message: cardBackMessage,
+      })
+      .eq("id", 1);
+    if (error) toast.error(error.message);
+    else {
+      toastRomanticSave("settings");
+      qc.invalidateQueries({ queryKey: ["site_settings"] });
+    }
+    setSavingCardText(false);
+  }, [cardTagline, cardScanLine, cardBackMessage, qc]);
+
   const restoreItem = (item: HistoryItem) => {
     setFgColor(item.fgColor);
     setBgColor(item.bgColor);
     setSize(item.size);
     setLevel(item.level);
     setLogoUrl(item.logoUrl);
+    setLogoSource(item.logoUrl);
     setLogoPreview(item.logoUrl || null);
     setLogoInput("");
     setLogoOriginalUrl(null);
@@ -684,19 +862,99 @@ function SharePanel() {
           </Button>
         </div>
 
-        <div className="flex w-full gap-3 max-w-sm">
+        <div className="flex w-full flex-col gap-3 max-w-md">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-left space-y-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Textos do cartão
+            </p>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Subtítulo (frente)</Label>
+              <Input
+                value={cardTagline}
+                onChange={(e) => setCardTagline(e.target.value)}
+                className="bg-white/5 border-white/10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Instrução abaixo do QR</Label>
+              <Input
+                value={cardScanLine}
+                onChange={(e) => setCardScanLine(e.target.value)}
+                className="bg-white/5 border-white/10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Mensagem do verso</Label>
+              <Textarea
+                rows={4}
+                value={cardBackMessage}
+                onChange={(e) => setCardBackMessage(e.target.value)}
+                placeholder="Escreva uma carta curta para o verso do cartão impresso..."
+                className="bg-white/5 border-white/10 min-h-[100px]"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={savingCardText}
+              onClick={() => void savePrintCardTexts()}
+              className="w-full rounded-xl"
+            >
+              {savingCardText ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Salvar textos do cartão
+            </Button>
+          </div>
+
+          <Button
+            onClick={downloadPrintCard}
+            disabled={isPrintingCard || isExporting}
+            className="h-12 rounded-xl gap-2 shadow-glow"
+          >
+            {isPrintingCard ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Printer className="h-4 w-4" />
+            )}
+            Baixar frente + verso (A6)
+          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void downloadPrintCardFront()}
+              disabled={isPrintingCard || isExporting}
+              className="h-10 rounded-xl border-white/10 text-xs"
+            >
+              Só frente
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void downloadPrintCardBack()}
+              disabled={isPrintingCard || isExporting}
+              className="h-10 rounded-xl border-white/10 text-xs"
+            >
+              Só verso
+            </Button>
+          </div>
           <Button
             onClick={downloadQR}
-            disabled={isExporting}
-            className="flex-1 h-12 rounded-xl gap-2 shadow-glow"
+            disabled={isExporting || isPrintingCard}
+            variant="outline"
+            className="h-11 rounded-xl gap-2 border-white/10"
           >
             {isExporting ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Download className="h-4 w-4" />
             )}
-            Baixar PNG
+            Só o QR Code (PNG)
           </Button>
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Cartão A6 em 300 DPI. Imprima frente e verso em papel grosso — ou use o arquivo
+            combinado com linha de corte.
+          </p>
         </div>
       </div>
 
@@ -821,21 +1079,28 @@ function SharePanel() {
 
           <TabsContent value="logo" className="mt-4 space-y-4">
             <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Logo Central
+              Foto no centro do QR
             </Label>
 
-            {logoPreview && (
-              <div className="relative w-full flex justify-center">
+            {(logoPreview || logoSource) && (
+              <div className="relative w-full flex flex-col items-center gap-3">
                 <div className="relative">
-                  <img
-                    src={logoPreview}
-                    alt="Preview da logo"
-                    className="w-16 h-16 object-contain rounded-lg border border-white/10 bg-white/5"
-                    onError={() => {
-                      setLogoPreview(null);
-                      toast.error("Erro ao carregar imagem");
-                    }}
-                  />
+                  <div
+                    className="h-28 w-28 overflow-hidden rounded-2xl border-2 border-accent/30 bg-white shadow-glow"
+                    style={{ backgroundColor: bgColor }}
+                  >
+                    {logoProcessing ? (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-accent" />
+                      </div>
+                    ) : (
+                      <img
+                        src={logoPreview ?? logoSource}
+                        alt="Preview da foto no QR"
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={clearLogo}
@@ -844,6 +1109,9 @@ function SharePanel() {
                     <X className="w-3 h-3" />
                   </button>
                 </div>
+                <p className="text-[10px] text-muted-foreground text-center max-w-[220px]">
+                  Preview quadrado — é assim que aparece no QR
+                </p>
               </div>
             )}
 
@@ -879,7 +1147,7 @@ function SharePanel() {
                     Enviar imagem
                   </Button>
                 <p className="text-[10px] text-muted-foreground/60 text-center">
-                  PNG, JPG, SVG • Máx. 2MB
+                  PNG, JPG, WEBP • Máx. 20MB
                 </p>
               </TabsContent>
               <TabsContent value="url" className="mt-3 space-y-3">
@@ -896,18 +1164,83 @@ function SharePanel() {
               </TabsContent>
             </Tabs>
 
-            {logoUrl && (
+            {logoSource && (
               <div className="space-y-4 pt-3 border-t border-white/5">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={logoFitMode === "cover" ? "default" : "secondary"}
+                    size="sm"
+                    className="text-xs rounded-xl"
+                    onClick={() => setLogoFitMode("cover")}
+                  >
+                    Preencher
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={logoFitMode === "contain" ? "default" : "secondary"}
+                    size="sm"
+                    className="text-xs rounded-xl"
+                    onClick={() => setLogoFitMode("contain")}
+                  >
+                    Caber inteira
+                  </Button>
+                </div>
+
                 <div className="space-y-2">
                   <div className="flex justify-between text-[10px] text-muted-foreground">
-                    <span>TAMANHO DA LOGO</span>
+                    <span>POSIÇÃO HORIZONTAL</span>
+                    <span>{logoFocalX}%</span>
+                  </div>
+                  <Slider
+                    value={[logoFocalX]}
+                    onValueChange={([v]) => setLogoFocalX(v)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    disabled={logoFitMode === "contain"}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>POSIÇÃO VERTICAL</span>
+                    <span>{logoFocalY}%</span>
+                  </div>
+                  <Slider
+                    value={[logoFocalY]}
+                    onValueChange={([v]) => setLogoFocalY(v)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    disabled={logoFitMode === "contain"}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>ZOOM</span>
+                    <span>{logoZoom}%</span>
+                  </div>
+                  <Slider
+                    value={[logoZoom]}
+                    onValueChange={([v]) => setLogoZoom(v)}
+                    min={100}
+                    max={160}
+                    step={2}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>TAMANHO NO QR</span>
                     <span>{logoSize}px</span>
                   </div>
                   <Slider
                     value={[logoSize]}
                     onValueChange={([v]) => setLogoSize(v)}
-                    min={20}
-                    max={Math.round(size * 0.4)}
+                    min={48}
+                    max={Math.round(size * 0.42)}
                     step={2}
                     className="accent-accent"
                   />
@@ -1076,7 +1409,7 @@ function MediaUpload({
 }: {
   onUpload: (url: string) => void;
   currentUrl?: string | null;
-  type?: "image" | "video";
+  type?: "image" | "video" | "audio";
 }) {
   const [uploading, setUploading] = useState(false);
 
@@ -1117,7 +1450,7 @@ function MediaUpload({
             />
           ) : (
             <div className="flex h-20 w-32 items-center justify-center rounded-lg bg-white/10 text-xs border border-white/5">
-              Vídeo
+              {type === "audio" ? "Áudio" : "Vídeo"}
             </div>
           )}
           <button
@@ -1136,10 +1469,14 @@ function MediaUpload({
           ) : (
             <Upload className="h-4 w-4" />
           )}
-          <span>{uploading ? "Subindo..." : `Upload ${type === "image" ? "Foto" : "Vídeo"}`}</span>
+          <span>
+            {uploading
+              ? "Subindo..."
+              : `Upload ${type === "image" ? "Foto" : type === "audio" ? "Áudio" : "Vídeo"}`}
+          </span>
           <input
             type="file"
-            accept={type === "image" ? "image/*" : "video/*"}
+            accept={type === "image" ? "image/*" : type === "audio" ? "audio/*" : "video/*"}
             className="hidden"
             onChange={handleFile}
             disabled={uploading}
@@ -1448,6 +1785,11 @@ function SettingsEditor() {
         relationship_start: form.relationship_start,
         secret_message: form.secret_message,
         hidden_video_url: form.hidden_video_url,
+        music_url: form.music_url,
+        ending_audio_url: form.ending_audio_url,
+        print_card_tagline: form.print_card_tagline,
+        print_card_scan_line: form.print_card_scan_line,
+        print_card_back_message: form.print_card_back_message,
         theme_mode: form.theme_mode,
         page_gate_enabled: form.page_gate_enabled,
         access_date: form.access_date,
@@ -1598,6 +1940,87 @@ function SettingsEditor() {
           onChange={(e) => setForm({ ...form, secret_message: e.target.value })}
           className="bg-white/5 rounded-xl border-white/5"
         />
+      </div>
+      <div className="space-y-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+        <div>
+          <h4 className="font-display text-lg">Cartão para impressão (QR)</h4>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Textos usados na frente e no verso do cartão A6.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="print-card-tagline" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+            Subtítulo da frente
+          </label>
+          <Input
+            id="print-card-tagline"
+            value={form.print_card_tagline}
+            onChange={(e) => setForm({ ...form, print_card_tagline: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5"
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="print-card-scan" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+            Texto abaixo do QR
+          </label>
+          <Input
+            id="print-card-scan"
+            value={form.print_card_scan_line}
+            onChange={(e) => setForm({ ...form, print_card_scan_line: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5"
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="print-card-back" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+            Mensagem do verso
+          </label>
+          <Textarea
+            id="print-card-back"
+            rows={4}
+            value={form.print_card_back_message}
+            onChange={(e) => setForm({ ...form, print_card_back_message: e.target.value })}
+            className="bg-white/5 rounded-xl border-white/5 min-h-[100px]"
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <label htmlFor="ending-audio-url" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+          Áudio da última surpresa
+        </label>
+        <p className="text-xs text-muted-foreground ml-1">
+          Toca no final cinematográfico, quando ela clicar em &quot;Uma última surpresa&quot;.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex-1 w-full">
+            <Input
+              id="ending-audio-url"
+              placeholder="URL do áudio ou faça upload ->"
+              value={form.ending_audio_url}
+              onChange={(e) => setForm({ ...form, ending_audio_url: e.target.value })}
+              className="bg-white/5 rounded-xl border-white/5"
+            />
+          </div>
+          <MediaUpload
+            type="audio"
+            onUpload={(url) => setForm({ ...form, ending_audio_url: url })}
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <label htmlFor="music-url" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
+          Nossa Música (URL do áudio)
+        </label>
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="flex-1 w-full">
+            <Input
+              placeholder="URL do MP3 ou faça upload ->"
+              value={form.music_url}
+              onChange={(e) => setForm({ ...form, music_url: e.target.value })}
+              className="bg-white/5 rounded-xl border-white/5"
+            />
+          </div>
+          <MediaUpload type="audio" onUpload={(url) => setForm({ ...form, music_url: url })} />
+        </div>
       </div>
       <div className="space-y-2">
         <label htmlFor="hidden-video-url" className="text-xs uppercase tracking-wider text-muted-foreground ml-1">
@@ -1794,6 +2217,89 @@ function PlaceRow({ p, onChange }: { p: Place; onChange: () => void }) {
 }
 
 /* -------------------- Memories -------------------- */
+/* -------------------- Love Notes -------------------- */
+function LoveNotesEditor() {
+  const { data, isLoading } = useLoveNotes();
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ["love_notes"] });
+
+  async function add() {
+    const nextOrder = (data?.length ?? 0) + 1;
+    const { error } = await supabase.from("love_notes").insert({
+      text: "Nova mensagem...",
+      sort_order: nextOrder,
+    });
+    if (error) toast.error(error.message);
+    else refresh();
+  }
+
+  if (isLoading) return <Loader />;
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl bg-white/5 p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground">Mural de mensagens</p>
+        <p className="mt-1">Pequenas coisas que você ama — aparecem em colunas no site.</p>
+      </div>
+      {(data ?? []).map((note) => (
+        <LoveNoteRow key={note.id} note={note} onChange={refresh} />
+      ))}
+      <Button onClick={add} variant="outline" className="w-full border-dashed rounded-xl py-8">
+        <Plus className="h-4 w-4" /> Adicionar mensagem
+      </Button>
+    </div>
+  );
+}
+
+function LoveNoteRow({ note, onChange }: { note: LoveNote; onChange: () => void }) {
+  const [form, setForm] = useState(note);
+
+  async function save() {
+    const { error } = await supabase
+      .from("love_notes")
+      .update({ text: form.text, sort_order: form.sort_order })
+      .eq("id", note.id);
+    if (error) toast.error(error.message);
+    else {
+      toastRomanticSave("notes");
+      onChange();
+    }
+  }
+
+  async function remove() {
+    if (!confirm("Remover esta mensagem?")) return;
+    const { error } = await supabase.from("love_notes").delete().eq("id", note.id);
+    if (error) toast.error(error.message);
+    else onChange();
+  }
+
+  return (
+    <div className="glass space-y-3 rounded-2xl p-4">
+      <Textarea
+        rows={2}
+        value={form.text}
+        onChange={(e) => setForm({ ...form, text: e.target.value })}
+        className="bg-white/5 rounded-xl border-white/5 font-script text-lg"
+      />
+      <div className="flex items-center justify-between">
+        <Input
+          type="number"
+          value={form.sort_order}
+          onChange={(e) => setForm({ ...form, sort_order: Number(e.target.value) })}
+          className="w-16 bg-white/5 rounded-lg border-white/5"
+        />
+        <div className="flex gap-2">
+          <Button size="sm" onClick={save} className="rounded-lg">
+            <Save className="h-4 w-4" />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={remove} className="text-destructive rounded-lg">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MemoriesEditor() {
   const { data, isLoading, isError, error } = useMemoryEnvelopes();
   const qc = useQueryClient();
@@ -1876,6 +2382,8 @@ function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void })
         title: form.title,
         message: form.message,
         is_easter_egg: form.is_easter_egg,
+        is_locked: form.is_locked,
+        unlock_at: form.unlock_at || null,
         sort_order: form.sort_order,
       })
       .eq("id", m.id);
@@ -1924,16 +2432,41 @@ function MemoryRow({ m, onChange }: { m: MemoryEnvelope; onChange: () => void })
           onChange={(icon_name) => setForm({ ...form, icon_name })}
         />
       </div>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
-          <Switch
-            id={`easter-${m.id}`}
-            checked={form.is_easter_egg}
-            onCheckedChange={(is_easter_egg) => setForm({ ...form, is_easter_egg })}
-          />
-          <Label htmlFor={`easter-${m.id}`} className="text-sm">
-            Marcar como easter egg
-          </Label>
+      {form.is_locked && (
+        <Input
+          type="datetime-local"
+          value={form.unlock_at ? form.unlock_at.slice(0, 16) : ""}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              unlock_at: e.target.value ? new Date(e.target.value).toISOString() : null,
+            })
+          }
+          className="bg-white/5 rounded-xl border-white/5"
+        />
+      )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
+            <Switch
+              id={`easter-${m.id}`}
+              checked={form.is_easter_egg}
+              onCheckedChange={(is_easter_egg) => setForm({ ...form, is_easter_egg })}
+            />
+            <Label htmlFor={`easter-${m.id}`} className="text-sm">
+              Easter egg
+            </Label>
+          </div>
+          <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2">
+            <Switch
+              id={`locked-${m.id}`}
+              checked={form.is_locked}
+              onCheckedChange={(is_locked) => setForm({ ...form, is_locked })}
+            />
+            <Label htmlFor={`locked-${m.id}`} className="text-sm">
+              Bloqueado
+            </Label>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">

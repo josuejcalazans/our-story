@@ -2,12 +2,14 @@ import {
   resetPlaybackAudioSession,
   setPlaybackAudioSession,
 } from "@/lib/heartbeat-audio-unlock";
-import { createAudioContext, createHeartbeatBus } from "@/lib/heartbeat-sound";
+import { createAudioContext, createHeartbeatBus, createBreathingLayer } from "@/lib/heartbeat-sound";
+import { loadHeartbeatSample } from "@/lib/heartbeat-sample";
 
 type Session = {
   ctx: AudioContext;
   master: GainNode;
   compressor: DynamicsCompressorNode;
+  stopBreathing: () => void;
 };
 
 let session: Session | null = null;
@@ -23,7 +25,7 @@ export function isHeartbeatAudioUnlocked() {
   return unlocked && !stopped;
 }
 
-export function getHeartbeatSession(): Session | null {
+export function getHeartbeatSession(): Omit<Session, "stopBreathing"> | null {
   if (stopped || !session || session.ctx.state === "closed") return null;
   return session;
 }
@@ -35,28 +37,27 @@ function ensureSession(): Session {
 
   const ctx = createAudioContext();
   const { master, compressor } = createHeartbeatBus(ctx);
-  session = { ctx, master, compressor };
+  const stopBreathing = createBreathingLayer(ctx, master);
+  session = { ctx, master, compressor, stopBreathing };
   return session;
 }
 
-function closeSession(ctx: AudioContext, master: GainNode, compressor: DynamicsCompressorNode) {
+function closeSession(s: Session) {
   try {
-    const t = ctx.currentTime;
-    master.gain.cancelScheduledValues(t);
-    master.gain.setValueAtTime(0, t);
-    master.disconnect();
-    compressor.disconnect();
+    s.stopBreathing();
+    const t = s.ctx.currentTime;
+    s.master.gain.cancelScheduledValues(t);
+    s.master.gain.setValueAtTime(0, t);
+    s.master.disconnect();
+    s.compressor.disconnect();
   } catch {
     /* nó já desconectado */
   }
 
-  if (ctx.state === "running") {
-    void ctx.suspend();
-  }
-  void ctx.close();
+  if (s.ctx.state === "running") void s.ctx.suspend();
+  void s.ctx.close();
 }
 
-/** No toque da tela Preparando — await resume para iOS */
 export async function unlockHeartbeatAudio(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   if (unlocked && session && session.ctx.state === "running") return true;
@@ -68,11 +69,10 @@ export async function unlockHeartbeatAudio(): Promise<boolean> {
 
     const { ctx, master } = ensureSession();
 
-    if (ctx.state === "suspended") {
-      await ctx.resume();
-    }
-
+    if (ctx.state === "suspended") await ctx.resume();
     if (stopped || ctx.state !== "running") return false;
+
+    void loadHeartbeatSample(ctx);
 
     const t = ctx.currentTime;
     const ping = ctx.createBufferSource();
@@ -99,8 +99,7 @@ export function setHeartbeatMuted(muted: boolean) {
   current.master.gain.setValueAtTime(muted ? 0 : 0.5, t);
 }
 
-/** Fade suave — usado no final do loader */
-export function fadeOutHeartbeatAudioSession(fadeMs = 550): Promise<void> {
+export function fadeOutHeartbeatAudioSession(fadeMs = 700): Promise<void> {
   if (fading) {
     return new Promise((resolve) => {
       const check = () => {
@@ -122,19 +121,18 @@ export function fadeOutHeartbeatAudioSession(fadeMs = 550): Promise<void> {
   }
 
   fading = true;
-  const { ctx, master, compressor } = current;
   const fadeSec = fadeMs / 1000;
 
   try {
-    const t = ctx.currentTime;
-    const currentGain = master.gain.value;
-    master.gain.cancelScheduledValues(t);
-    master.gain.setValueAtTime(currentGain, t);
-    master.gain.linearRampToValueAtTime(0, t + fadeSec);
+    const t = current.ctx.currentTime;
+    const currentGain = current.master.gain.value;
+    current.master.gain.cancelScheduledValues(t);
+    current.master.gain.setValueAtTime(currentGain, t);
+    current.master.gain.linearRampToValueAtTime(0, t + fadeSec);
   } catch {
     fading = false;
     session = null;
-    closeSession(ctx, master, compressor);
+    closeSession(current);
     resetPlaybackAudioSession();
     return Promise.resolve();
   }
@@ -142,15 +140,15 @@ export function fadeOutHeartbeatAudioSession(fadeMs = 550): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(() => {
       fading = false;
+      const s = session;
       session = null;
       resetPlaybackAudioSession();
-      closeSession(ctx, master, compressor);
+      if (s) closeSession(s);
       resolve();
     }, fadeMs + 60);
   });
 }
 
-/** Para imediato — só quando já está silenciado ou navegação forçada */
 export function stopHeartbeatAudioSession() {
   stopped = true;
   unlocked = false;
@@ -159,7 +157,6 @@ export function stopHeartbeatAudioSession() {
 
   const current = session;
   session = null;
-
   if (!current || current.ctx.state === "closed") return;
-  closeSession(current.ctx, current.master, current.compressor);
+  closeSession(current);
 }

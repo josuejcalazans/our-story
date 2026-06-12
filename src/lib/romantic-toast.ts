@@ -27,6 +27,10 @@ const SAVED_BY_CONTEXT = {
     "Foto guardada no nosso álbum ♥",
     "Mais um instante salvo para sempre",
   ],
+  notes: [
+    "Mais uma razão para te amar ♥",
+    "Mensagem guardada no mural do coração",
+  ],
   default: [
     "Guardado com carinho ♥",
     "Salvo no coração da nossa história",
