@@ -124,7 +124,12 @@ export type Database = {
           print_card_back_message: string
           print_card_scan_line: string
           print_card_tagline: string
+          qr_config: Json | null
           relationship_start: string
+          saved_qr_card_front_url: string
+          saved_qr_card_sheet_url: string
+          saved_qr_image_url: string
+          saved_qr_updated_at: string | null
           secret_message: string
           theme_mode: string | null
           updated_at: string
@@ -142,7 +147,12 @@ export type Database = {
           print_card_back_message?: string
           print_card_scan_line?: string
           print_card_tagline?: string
+          qr_config?: Json | null
           relationship_start?: string
+          saved_qr_card_front_url?: string
+          saved_qr_card_sheet_url?: string
+          saved_qr_image_url?: string
+          saved_qr_updated_at?: string | null
           secret_message?: string
           theme_mode?: string | null
           updated_at?: string
@@ -160,7 +170,12 @@ export type Database = {
           print_card_back_message?: string
           print_card_scan_line?: string
           print_card_tagline?: string
+          qr_config?: Json | null
           relationship_start?: string
+          saved_qr_card_front_url?: string
+          saved_qr_card_sheet_url?: string
+          saved_qr_image_url?: string
+          saved_qr_updated_at?: string | null
           secret_message?: string
           theme_mode?: string | null
           updated_at?: string
