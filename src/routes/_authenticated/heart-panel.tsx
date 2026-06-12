@@ -104,7 +104,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import QRStylePicker from "@/components/QRStylePicker";
 import { useStyledQRCode } from "@/hooks/use-styled-qr";
-import { canvasToBlob, createExportCanvas, downloadBlob, EXPORT_RESOLUTIONS, prepareExportOptions, renderExportCanvas, renderQRSourceCanvas, type ExportResolution } from "@/lib/qr-export";
+import { canvasToBlob, computeExportLayout, createExportCanvas, downloadBlob, EXPORT_RESOLUTIONS, prepareExportOptions, renderExportCanvas, renderQRSourceCanvas, type ExportResolution } from "@/lib/qr-export";
 import {
   renderPrintCardBackCanvas,
   renderPrintCardFrontCanvas,
@@ -138,6 +138,13 @@ import {
   type CornerSquareType,
   type DotType,
 } from "@/lib/qr-styles";
+import {
+  loadQrHistory,
+  MAX_QR_HISTORY,
+  persistQrHistory,
+  QR_HISTORY_KEY,
+  type QRHistoryItem,
+} from "@/lib/qr-history";
 
 const COLOR_PRESETS = [
   { fg: "#eb5e8e", bg: "#ffffff", name: "Romance" },
@@ -147,8 +154,6 @@ const COLOR_PRESETS = [
   { fg: "#ffffff", bg: "#0d0717", name: "Dark" },
 ];
 
-const HISTORY_KEY = "qr-generator-history";
-const MAX_HISTORY = 10;
 const DEFAULT_BORDER_MARGIN = 24;
 
 type ECLevel = "L" | "M" | "Q" | "H";
@@ -158,21 +163,6 @@ const EC_LEVELS: { value: ECLevel; label: string; hint: string }[] = [
   { value: "Q", label: "Q", hint: "~25%" },
   { value: "H", label: "H", hint: "~30%" },
 ];
-
-type HistoryItem = {
-  id: string;
-  text: string;
-  fgColor: string;
-  bgColor: string;
-  size: number;
-  level: ECLevel;
-  logoUrl: string;
-  logoSize: number;
-  dotStyle: DotType;
-  cornerSquareStyle: CornerSquareType;
-  cornerDotStyle: CornerDotType;
-  createdAt: number;
-};
 
 const ADMIN_TABS = ["timeline", "stats", "places", "gallery", "memories", "notes", "letter", "share"] as const;
 
@@ -672,7 +662,7 @@ function SharePanel() {
   const [includeMargin, setIncludeMargin] = useState(true);
   const [borderMargin, setBorderMargin] = useState(DEFAULT_BORDER_MARGIN);
   const [exportResolution, setExportResolution] = useState<ExportResolution>("preview");
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<QRHistoryItem[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [isPrintingCard, setIsPrintingCard] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -690,8 +680,8 @@ function SharePanel() {
 
   useEffect(() => {
     setUrl(window.location.origin);
-    const raw = localStorage.getItem(HISTORY_KEY);
-    if (raw) setHistory(JSON.parse(raw));
+    const loaded = loadQrHistory();
+    setHistory(loaded.length > 0 ? persistQrHistory(loaded) : loaded);
   }, []);
 
   useEffect(() => {
@@ -900,7 +890,7 @@ function SharePanel() {
 
   const saveToHistory = useCallback(() => {
     if (!url.trim()) return;
-    const item: HistoryItem = {
+    const item: QRHistoryItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       text: url,
       fgColor,
@@ -926,9 +916,8 @@ function SharePanel() {
           h.logoUrl === item.logoUrl
         ),
     );
-    const nextHistory = [item, ...filtered].slice(0, MAX_HISTORY);
+    const nextHistory = persistQrHistory([item, ...filtered]);
     setHistory(nextHistory);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(nextHistory));
   }, [
     url,
     fgColor,
@@ -1050,11 +1039,12 @@ function SharePanel() {
     setIsSavingQR(true);
     try {
       const margin = includeMargin ? borderMargin : 0;
-      const fhdQrSize = 1920 - margin * 2;
+      const designQrSize = size;
+      const fhdLayout = computeExportLayout(designQrSize, margin, 1920);
       const cardQrSize = 520;
 
       const [fhdOptions, cardOptions] = await Promise.all([
-        prepareExportOptions(styledQROptions, fhdQrSize),
+        prepareExportOptions(styledQROptions, fhdLayout.qrPixelSize),
         prepareExportOptions(styledQROptions, cardQrSize),
       ]);
 
@@ -1096,8 +1086,8 @@ function SharePanel() {
 
       const [qrExport, cardSheet, cardFront] = await Promise.all([
         (async () => {
-          const qrCanvas = await renderQRSourceCanvas(exportOptions, fhdQrSize, null, true);
-          return createExportCanvas(qrCanvas, exportOptions.bgColor, margin);
+          const qrCanvas = await renderQRSourceCanvas(exportOptions, fhdLayout.qrPixelSize, null, true);
+          return createExportCanvas(qrCanvas, exportOptions.bgColor, fhdLayout.margin);
         })(),
         renderPrintCardSheetCanvas(cardExportOptions, margin, printCardLayout, null, true),
         renderPrintCardFrontCanvas(cardExportOptions, margin, printCardLayout, null, true),
@@ -1190,7 +1180,7 @@ function SharePanel() {
     }
   }, [savedCardSheetUrl]);
 
-  const restoreItem = (item: HistoryItem) => {
+  const restoreItem = (item: QRHistoryItem) => {
     setFgColor(item.fgColor);
     setBgColor(item.bgColor);
     setSize(item.size);
@@ -1738,7 +1728,7 @@ function SharePanel() {
                     size="sm"
                     onClick={() => {
                       setHistory([]);
-                      localStorage.removeItem(HISTORY_KEY);
+                      localStorage.removeItem(QR_HISTORY_KEY);
                     }}
                     className="h-7 text-[10px] text-muted-foreground hover:text-destructive"
                   >
