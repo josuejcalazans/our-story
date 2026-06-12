@@ -38,6 +38,9 @@ export type SiteSettings = {
   hidden_video_url: string;
   music_url: string;
   ending_audio_url: string;
+  print_card_tagline: string;
+  print_card_scan_line: string;
+  print_card_back_message: string;
   theme_mode: ThemeMode;
   page_gate_enabled: boolean;
   access_date: string | null;
@@ -125,6 +128,9 @@ export function useSettings() {
         ...data,
         music_url: data.music_url ?? "",
         ending_audio_url: data.ending_audio_url ?? "",
+        print_card_tagline: data.print_card_tagline ?? "Algo feito só para você",
+        print_card_scan_line: data.print_card_scan_line ?? "Escaneie para abrir nossa história",
+        print_card_back_message: data.print_card_back_message ?? "",
         theme_mode: toThemeMode(data.theme_mode),
         page_gate_enabled: Boolean(data.page_gate_enabled),
         access_date: data.access_date ?? null,
