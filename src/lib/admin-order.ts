@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type SortableRow = { id: string; sort_order: number };
@@ -11,11 +12,19 @@ export type OrderableTable =
   | "love_notes";
 
 export function sortByOrder<T extends SortableRow>(items: T[]): T[] {
-  return [...items].sort((a, b) => a.sort_order - b.sort_order);
+  return [...items].sort((a, b) => {
+    const diff = a.sort_order - b.sort_order;
+    if (diff !== 0) return diff;
+    return a.id.localeCompare(b.id);
+  });
 }
 
 export function nextSortOrder<T extends SortableRow>(items: T[]) {
   return items.reduce((max, item) => Math.max(max, item.sort_order), 0) + 1;
+}
+
+export function applySortOrders<T extends SortableRow>(items: T[]): T[] {
+  return items.map((item, index) => ({ ...item, sort_order: index + 1 }));
 }
 
 export function swapInList<T extends { id: string }>(
@@ -37,13 +46,12 @@ export async function persistTableOrder<T extends { id: string }>(
   table: OrderableTable,
   items: T[],
 ) {
-  for (let index = 0; index < items.length; index++) {
-    const { error } = await supabase
-      .from(table)
-      .update({ sort_order: index + 1 })
-      .eq("id", items[index].id);
-    if (error) throw error;
-  }
+  const updates = items.map((item, index) =>
+    supabase.from(table).update({ sort_order: index + 1 }).eq("id", item.id),
+  );
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
 }
 
 export function hasDuplicateSortOrder<T extends SortableRow>(items: T[]) {
@@ -53,4 +61,32 @@ export function hasDuplicateSortOrder<T extends SortableRow>(items: T[]) {
     seen.add(item.sort_order);
   }
   return false;
+}
+
+export function hasGapsInSortOrder<T extends SortableRow>(items: T[]) {
+  if (items.length === 0) return false;
+  const ordered = sortByOrder(items);
+  return ordered.some((item, index) => item.sort_order !== index + 1);
+}
+
+/** Atualiza o cache na hora e persiste em paralelo no Supabase. */
+export async function persistOrderOptimistic<T extends SortableRow>(
+  qc: QueryClient,
+  queryKey: readonly unknown[],
+  table: OrderableTable,
+  items: T[],
+) {
+  const previous = qc.getQueryData<T[]>(queryKey);
+  qc.setQueryData(queryKey, applySortOrders(items));
+
+  try {
+    await persistTableOrder(table, items);
+  } catch (err) {
+    if (previous !== undefined) {
+      qc.setQueryData(queryKey, previous);
+    } else {
+      await qc.invalidateQueries({ queryKey: [...queryKey] });
+    }
+    throw err;
+  }
 }
