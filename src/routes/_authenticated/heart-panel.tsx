@@ -50,6 +50,7 @@ import {
   sortByOrder,
   swapInList,
 } from "@/lib/admin-order";
+import { isHeicFile, prepareImageForUpload } from "@/lib/prepare-upload-image";
 import StoryVideoPlayer from "@/components/story/StoryVideoPlayer";
 import { useAuth } from "@/lib/use-auth";
 import {
@@ -642,7 +643,7 @@ function SharePanel() {
   const handleLogoFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    if (!file.type.startsWith("image/") && !isHeicFile(file)) {
       toast.error("Envie um arquivo de imagem");
       return;
     }
@@ -1510,20 +1511,33 @@ function MediaUpload({
 
     setUploading(true);
     try {
-      const fileExt = file.name.split(".").pop();
+      let uploadFile = file;
+      if (type === "image") {
+        const wasHeic = isHeicFile(file);
+        uploadFile = await prepareImageForUpload(file);
+        if (wasHeic) {
+          toast.message("Convertendo HEIC para JPEG em alta qualidade…", { duration: 2000 });
+        }
+      }
+
+      const fileExt = uploadFile.name.split(".").pop() || "bin";
       const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      const { error: uploadError } = await supabase.storage.from("assets").upload(filePath, file, {
-        contentType: file.type || undefined,
-        cacheControl: "3600",
-      });
+      const { error: uploadError } = await supabase.storage
+        .from("assets")
+        .upload(filePath, uploadFile, {
+          contentType: uploadFile.type || undefined,
+          cacheControl: "3600",
+        });
 
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("assets").getPublicUrl(filePath);
       onUpload(data.publicUrl);
-      toast.success("Upload concluído!");
+      toast.success(
+        type === "image" && isHeicFile(file) ? "HEIC convertido e enviado!" : "Upload concluído!",
+      );
     } catch (err) {
       toast.error("Erro no upload");
       console.error(err);
@@ -1578,7 +1592,13 @@ function MediaUpload({
           </span>
           <input
             type="file"
-            accept={type === "image" ? "image/*" : type === "audio" ? "audio/*" : "video/*"}
+            accept={
+              type === "image"
+                ? "image/*,.heic,.heif"
+                : type === "audio"
+                  ? "audio/*"
+                  : "video/*"
+            }
             className="hidden"
             onChange={handleFile}
             disabled={uploading}
