@@ -45,6 +45,7 @@ import {
 } from "@/components/admin/AdminOrderableCard";
 import { sortGalleryByDate, sortGalleryImages } from "@/lib/gallery-sort";
 import {
+  hasDuplicateSortOrder,
   nextSortOrder,
   persistTableOrder,
   sortByOrder,
@@ -372,8 +373,20 @@ function GalleryEditor() {
     try {
       await persistTableOrder("gallery_images", next);
       refresh();
+      toast.success("Ordem da galeria atualizada!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
+    }
+  }
+
+  async function normalizeOrder() {
+    const list = sortGalleryImages(data ?? []);
+    try {
+      await persistTableOrder("gallery_images", list);
+      refresh();
+      toast.success("Ordem da galeria corrigida!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao corrigir ordem");
     }
   }
 
@@ -393,21 +406,36 @@ function GalleryEditor() {
     <div className="space-y-4">
       <AdminOrderHint
         action={
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => void sortByDate()}
-            className="gap-2 rounded-xl"
-          >
-            <ArrowUpDown className="h-4 w-4" />
-            Ordenar por data
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {hasDuplicateSortOrder(sorted) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void normalizeOrder()}
+                className="rounded-xl"
+              >
+                Corrigir ordem
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => void sortByDate()}
+              className="gap-2 rounded-xl"
+            >
+              <ArrowUpDown className="h-4 w-4" />
+              Ordenar por data
+            </Button>
+          </div>
         }
       >
         <p>
-          A ordem aqui é <span className="text-foreground">esquerda → direita</span> no site.
-          Use as setas em cada card para reorganizar.
+          <span className="font-medium text-foreground">Painel → aba Galeria.</span> A ordem no
+          site é <span className="text-foreground">esquerda → direita</span>. Em cada card, use as
+          setas em <span className="text-foreground">Ordem no site</span> (embaixo) — não precisa
+          clicar em Salvar.
         </p>
       </AdminOrderHint>
       <AdminOrderableGrid>
@@ -543,6 +571,9 @@ function GalleryRow({
         onRemove={remove}
         saving={saving}
         position={position}
+        total={total}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
       />
     </AdminOrderableShell>
   );
@@ -1594,7 +1625,7 @@ function MediaUpload({
             type="file"
             accept={
               type === "image"
-                ? "image/*,.heic,.heif"
+                ? "image/*,.heic,.heif,.HEIC,.HEIF"
                 : type === "audio"
                   ? "audio/*"
                   : "video/*"
@@ -1804,6 +1835,9 @@ function TimelineRow({
         onRemove={remove}
         saving={saving}
         position={position}
+        total={total}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
       />
     </AdminOrderableShell>
   );
@@ -1952,6 +1986,9 @@ function StatRow({
         onRemove={remove}
         saving={saving}
         position={position}
+        total={total}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
       />
     </AdminOrderableShell>
   );
@@ -2438,6 +2475,9 @@ function PlaceRow({
         onRemove={remove}
         saving={saving}
         position={position}
+        total={total}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
       />
     </AdminOrderableShell>
   );
@@ -2567,6 +2607,9 @@ function LoveNoteRow({
         onRemove={remove}
         saving={saving}
         position={position}
+        total={total}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
       />
     </AdminOrderableShell>
   );
@@ -2791,6 +2834,9 @@ function MemoryRow({
         onRemove={remove}
         saving={saving}
         position={position}
+        total={total}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
       />
     </AdminOrderableShell>
   );

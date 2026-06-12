@@ -9,6 +9,8 @@ export function isHeicFile(file: File) {
   return (
     name.endsWith(".heic") ||
     name.endsWith(".heif") ||
+    name.endsWith(".HEIC") ||
+    name.endsWith(".HEIF") ||
     type === "image/heic" ||
     type === "image/heif" ||
     type === "image/heic-sequence" ||
@@ -28,7 +30,7 @@ async function convertHeicToJpeg(file: File): Promise<File> {
     throw new Error("Conversão HEIC falhou");
   }
 
-  const baseName = file.name.replace(/\.(heic|heif)$/i, "") || "foto";
+  const baseName = file.name.replace(/\.(heic|heif|HEIC)$/i, "") || "foto";
   return new File([blob], `${baseName}.jpg`, {
     type: "image/jpeg",
     lastModified: file.lastModified,

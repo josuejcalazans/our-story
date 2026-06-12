@@ -37,10 +37,20 @@ export async function persistTableOrder<T extends { id: string }>(
   table: OrderableTable,
   items: T[],
 ) {
-  const updates = items.map((item, index) =>
-    supabase.from(table).update({ sort_order: index + 1 }).eq("id", item.id),
-  );
-  const results = await Promise.all(updates);
-  const failed = results.find((r) => r.error);
-  if (failed?.error) throw failed.error;
+  for (let index = 0; index < items.length; index++) {
+    const { error } = await supabase
+      .from(table)
+      .update({ sort_order: index + 1 })
+      .eq("id", items[index].id);
+    if (error) throw error;
+  }
+}
+
+export function hasDuplicateSortOrder<T extends SortableRow>(items: T[]) {
+  const seen = new Set<number>();
+  for (const item of items) {
+    if (seen.has(item.sort_order)) return true;
+    seen.add(item.sort_order);
+  }
+  return false;
 }

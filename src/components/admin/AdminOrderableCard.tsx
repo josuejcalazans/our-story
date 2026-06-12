@@ -79,34 +79,78 @@ export function AdminOrderActions({
   saving = false,
   saveLabel = "Salvar",
   position,
+  total,
+  onMoveUp,
+  onMoveDown,
 }: {
   onSave: () => void;
   onRemove: () => void;
   saving?: boolean;
   saveLabel?: string;
   position?: number;
+  total?: number;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
+  const canReorder = position !== undefined && total !== undefined && onMoveUp && onMoveDown;
+
   return (
-    <div className="mt-auto flex items-center justify-between border-t border-white/5 pt-2">
-      <div className="flex gap-2">
-        <Button onClick={onSave} disabled={saving} size="sm" className="rounded-lg px-4">
-          <Save className="h-4 w-4" />
-          {saving ? "..." : saveLabel}
-        </Button>
-        <Button
-          onClick={onRemove}
-          size="sm"
-          variant="ghost"
-          className="rounded-lg text-muted-foreground hover:text-destructive"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-      {position !== undefined && (
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Ordem: <span className="text-foreground">{position}</span>
-        </span>
+    <div className="mt-auto space-y-2 border-t border-white/5 pt-2">
+      {canReorder && (
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.03] px-2 py-1.5">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Ordem no site
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              disabled={position <= 1}
+              onClick={onMoveUp}
+              className="h-8 w-8 rounded-lg"
+              aria-label="Mover para cima"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+            <span className="min-w-[3.5rem] text-center text-sm font-medium tabular-nums">
+              {position} / {total}
+            </span>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              disabled={position >= total}
+              onClick={onMoveDown}
+              className="h-8 w-8 rounded-lg"
+              aria-label="Mover para baixo"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       )}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex gap-2">
+          <Button onClick={onSave} disabled={saving} size="sm" className="rounded-lg px-4">
+            <Save className="h-4 w-4" />
+            {saving ? "..." : saveLabel}
+          </Button>
+          <Button
+            onClick={onRemove}
+            size="sm"
+            variant="ghost"
+            className="rounded-lg text-muted-foreground hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+        {position !== undefined && !canReorder && (
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            Ordem: <span className="text-foreground">{position}</span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }
