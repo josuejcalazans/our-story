@@ -1,5 +1,5 @@
 import type { StyledQROptions } from "@/lib/qr-config";
-import { createExportCanvas, renderQRSourceCanvas } from "@/lib/qr-export";
+import { createExportCanvas, renderQRSourceCanvas, scaleDesignMargin } from "@/lib/qr-export";
 
 /** A6 em 300 DPI — ideal para cartão impresso */
 export const PRINT_CARD_WIDTH = 1240;
@@ -186,13 +186,15 @@ export async function renderPrintCardFrontCanvas(
   alreadyPrepared = false,
 ): Promise<HTMLCanvasElement> {
   const qrSize = 520;
+  const designQrSize = options.designQrSize ?? options.size;
   const sourceQr = await renderQRSourceCanvas(
     alreadyPrepared ? options : { ...options, size: qrSize },
     qrSize,
     previewCanvas,
     alreadyPrepared,
   );
-  const qrWithBorder = createExportCanvas(sourceQr, options.bgColor, qrMargin);
+  const scaledMargin = scaleDesignMargin(qrMargin, designQrSize, qrSize);
+  const qrWithBorder = createExportCanvas(sourceQr, options.bgColor, scaledMargin);
 
   const canvas = document.createElement("canvas");
   canvas.width = PRINT_CARD_WIDTH;
