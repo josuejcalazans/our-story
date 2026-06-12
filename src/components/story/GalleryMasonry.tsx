@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ZoomIn } from "lucide-react";
+import HeicSafeImage from "@/components/admin/HeicSafeImage";
+import { isHeicUrl } from "@/lib/prepare-upload-image";
 import type { GalleryImage } from "@/lib/use-site-content";
 
 function useColumnCount() {
@@ -47,12 +49,20 @@ function GalleryTile({ img, index, onOpen }: GalleryTileProps) {
       >
         <div className="absolute inset-0 rounded-[1.35rem] border-2 border-transparent transition-all duration-500 group-hover:border-primary/45 group-hover:shadow-[0_0_32px_-6px_var(--primary)]" />
         <div className="relative overflow-hidden rounded-2xl bg-white/5">
-          <img
-            src={img.image_url}
-            alt={img.caption || img.title || "Foto da galeria"}
-            loading="lazy"
-            className="block w-full h-auto transition-transform duration-700 ease-out group-hover:scale-[1.04]"
-          />
+          {isHeicUrl(img.image_url) ? (
+            <HeicSafeImage
+              src={img.image_url}
+              alt={img.caption || img.title || "Foto da galeria"}
+              className="block w-full h-auto transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+            />
+          ) : (
+            <img
+              src={img.image_url}
+              alt={img.caption || img.title || "Foto da galeria"}
+              loading="lazy"
+              className="block w-full h-auto transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+            />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
           <div className="absolute right-3 top-3 flex h-9 w-9 scale-90 items-center justify-center rounded-full bg-black/45 opacity-0 backdrop-blur-md transition-all duration-300 group-hover:scale-100 group-hover:opacity-100">
             <ZoomIn className="h-4 w-4 text-white" />

@@ -51,7 +51,13 @@ import {
   sortByOrder,
   swapInList,
 } from "@/lib/admin-order";
-import { isHeicFile, prepareImageForUpload } from "@/lib/prepare-upload-image";
+import HeicSafeImage from "@/components/admin/HeicSafeImage";
+import {
+  isHeicFile,
+  isHeicUrl,
+  prepareImageForUpload,
+  repairHeicImageUrl,
+} from "@/lib/prepare-upload-image";
 import StoryVideoPlayer from "@/components/story/StoryVideoPlayer";
 import { useAuth } from "@/lib/use-auth";
 import {
@@ -401,12 +407,54 @@ function GalleryEditor() {
     }
   }
 
+  const heicCount = sorted.filter((img) => isHeicUrl(img.image_url)).length;
+
+  async function repairAllHeic() {
+    const heicImages = sorted.filter((img) => isHeicUrl(img.image_url));
+    if (!heicImages.length) {
+      toast.message("Nenhuma foto HEIC na galeria");
+      return;
+    }
+
+    let fixed = 0;
+    try {
+      for (const img of heicImages) {
+        const newUrl = await repairHeicImageUrl(img.image_url);
+        const { error } = await supabase
+          .from("gallery_images")
+          .update({ image_url: newUrl })
+          .eq("id", img.id);
+        if (error) throw error;
+        fixed++;
+      }
+      refresh();
+      toast.success(`${fixed} foto(s) HEIC corrigida(s)!`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? `${err.message} (${fixed}/${heicImages.length} corrigidas)`
+          : "Erro ao corrigir fotos HEIC",
+      );
+    }
+  }
+
   if (isLoading) return <Loader />;
   return (
     <div className="space-y-4">
       <AdminOrderHint
         action={
           <div className="flex flex-wrap gap-2">
+            {heicCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void repairAllHeic()}
+                className="rounded-xl"
+              >
+                Corrigir {heicCount} HEIC
+              </Button>
+            )}
             {hasDuplicateSortOrder(sorted) && (
               <Button
                 type="button"
@@ -432,10 +480,10 @@ function GalleryEditor() {
         }
       >
         <p>
-          <span className="font-medium text-foreground">Painel → aba Galeria.</span> A ordem no
-          site é <span className="text-foreground">esquerda → direita</span>. Em cada card, use as
-          setas em <span className="text-foreground">Ordem no site</span> (embaixo) — não precisa
-          clicar em Salvar.
+          A ordem no site é <span className="text-foreground">esquerda → direita</span>. Fotos do
+          iPhone (HEIC) são convertidas no upload; se o preview estiver quebrado, use{" "}
+          <span className="text-foreground">Corrigir HEIC → JPEG</span> e depois{" "}
+          <span className="text-foreground">Salvar</span>.
         </p>
       </AdminOrderHint>
       <AdminOrderableGrid>
@@ -1535,6 +1583,25 @@ function MediaUpload({
   type?: "image" | "video" | "audio";
 }) {
   const [uploading, setUploading] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  const [previewBroken, setPreviewBroken] = useState(false);
+
+  async function handleRepairHeic() {
+    if (!currentUrl || !isHeicUrl(currentUrl)) return;
+    setRepairing(true);
+    try {
+      toast.message("Convertendo HEIC para JPEG…", { duration: 2500 });
+      const newUrl = await repairHeicImageUrl(currentUrl);
+      onUpload(newUrl);
+      setPreviewBroken(false);
+      toast.success("Foto HEIC corrigida! Clique em Salvar para guardar.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao corrigir HEIC");
+      console.error(err);
+    } finally {
+      setRepairing(false);
+    }
+  }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -1570,22 +1637,30 @@ function MediaUpload({
         type === "image" && isHeicFile(file) ? "HEIC convertido e enviado!" : "Upload concluído!",
       );
     } catch (err) {
-      toast.error("Erro no upload");
+      const message = err instanceof Error ? err.message : "Erro no upload";
+      toast.error(
+        type === "image" && isHeicFile(file) ? `Falha ao converter HEIC: ${message}` : message,
+      );
       console.error(err);
     } finally {
       setUploading(false);
+      e.target.value = "";
     }
   }
+
+  const showHeicRepair =
+    type === "image" && currentUrl && (isHeicUrl(currentUrl) || previewBroken);
 
   return (
     <div className="space-y-2">
       {currentUrl && (
         <div className="relative inline-block">
           {type === "image" ? (
-            <img
+            <HeicSafeImage
               src={currentUrl}
               alt="Preview"
               className="h-20 w-32 rounded-lg object-cover shadow-soft"
+              onBroken={() => setPreviewBroken(true)}
             />
           ) : type === "video" ? (
             <video
@@ -1608,6 +1683,25 @@ function MediaUpload({
             <X className="h-3 w-3" />
           </button>
         </div>
+      )}
+      {showHeicRepair && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={repairing || uploading}
+          onClick={() => void handleRepairHeic()}
+          className="rounded-lg text-xs"
+        >
+          {repairing ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Corrigindo HEIC…
+            </>
+          ) : (
+            "Corrigir HEIC → JPEG"
+          )}
+        </Button>
       )}
       <div className="flex items-center gap-2">
         <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm transition-colors hover:bg-white/10 border border-white/5">

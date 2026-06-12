@@ -27,7 +27,9 @@ import CinematicEnding from "@/components/story/CinematicEnding";
 import ChapterNav from "@/components/story/ChapterNav";
 import GalleryMasonry from "@/components/story/GalleryMasonry";
 import LoveLetterEnvelope from "@/components/story/LoveLetterEnvelope";
+import HeicSafeImage from "@/components/admin/HeicSafeImage";
 import StoryVideoPlayer from "@/components/story/StoryVideoPlayer";
+import { isHeicUrl } from "@/lib/prepare-upload-image";
 import { isEmbeddableVideo } from "@/lib/video-embed";
 import { StoryIcon } from "@/lib/story-icons";
 import { StoryDateDisplay } from "@/components/StoryDate";
@@ -364,11 +366,19 @@ function Timeline({
                   >
                     {item.image_url && (
                       <div className="flex max-h-[min(70vw,22rem)] w-full items-center justify-center overflow-hidden bg-black/20">
-                        <img
-                          src={item.image_url}
-                          alt={item.title}
-                          className="max-h-[min(70vw,22rem)] w-full object-contain transition-transform duration-500 group-hover/timeline-card:scale-[1.02]"
-                        />
+                        {isHeicUrl(item.image_url) ? (
+                          <HeicSafeImage
+                            src={item.image_url}
+                            alt={item.title}
+                            className="max-h-[min(70vw,22rem)] w-full object-contain transition-transform duration-500 group-hover/timeline-card:scale-[1.02]"
+                          />
+                        ) : (
+                          <img
+                            src={item.image_url}
+                            alt={item.title}
+                            className="max-h-[min(70vw,22rem)] w-full object-contain transition-transform duration-500 group-hover/timeline-card:scale-[1.02]"
+                          />
+                        )}
                       </div>
                     )}
                     <div className="p-6">
