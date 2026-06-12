@@ -1,4 +1,8 @@
-import { resolveLogoForQrExport } from "@/lib/image-fit";
+import {
+  logoProcessPixelSize,
+  resolveLogoForQrExport,
+  upscaleLogoSquare,
+} from "@/lib/image-fit";
 import QRCodeStyling from "qr-code-styling";
 import { buildQRStylingConfig, type StyledQROptions } from "@/lib/qr-config";
 
@@ -13,6 +17,31 @@ export const EXPORT_RESOLUTIONS: {
   { value: "fhd", label: "Full HD", size: 1920 },
   { value: "4k", label: "4K", size: 3840 },
 ];
+
+/** Mantém a mesma proporção de borda do preview (ex.: 24px em 280px → ~330px em 4K) */
+export function computeExportLayout(
+  designQrSize: number,
+  borderMargin: number,
+  outputSize: number,
+): { margin: number; qrPixelSize: number } {
+  if (borderMargin <= 0) {
+    return { margin: 0, qrPixelSize: outputSize };
+  }
+
+  const designTotal = designQrSize + borderMargin * 2;
+  const margin = Math.max(1, Math.round(borderMargin * (outputSize / designTotal)));
+  const qrPixelSize = Math.max(1, outputSize - margin * 2);
+  return { margin, qrPixelSize };
+}
+
+export function scaleDesignMargin(
+  borderMargin: number,
+  designQrSize: number,
+  targetQrSize: number,
+): number {
+  if (borderMargin <= 0) return 0;
+  return Math.max(1, Math.round(borderMargin * (targetQrSize / Math.max(designQrSize, 1))));
+}
 
 export function createExportCanvas(
   qrCanvas: HTMLCanvasElement,
@@ -64,6 +93,16 @@ function scaleCanvas(source: HTMLCanvasElement, size: number): HTMLCanvasElement
   return scaled;
 }
 
+function loadImageForExport(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Não foi possível carregar a logo"));
+    img.src = src;
+  });
+}
+
 async function blobToCanvas(blob: Blob, size: number): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -101,17 +140,26 @@ export async function prepareExportOptions(
   let logoUrl = options.logoUrl;
 
   if (logoUrl && qrPixelSize > designQrSize) {
-    const source = options.logoRawSource || options.logoUrl;
-    logoUrl = await resolveLogoForQrExport(source, {
-      designQrSize,
-      exportQrSize: qrPixelSize,
-      logoDisplaySize: options.logoSize,
-      logoFitMode: options.logoFitMode,
-      logoFocalX: options.logoFocalX,
-      logoFocalY: options.logoFocalY,
-      logoZoom: options.logoZoom,
-      bgColor: options.bgColor,
-    });
+    const exportLogoDisplay = options.logoSize * (qrPixelSize / designQrSize);
+    const targetLogoSize = logoProcessPixelSize(qrPixelSize, exportLogoDisplay);
+
+    const previewImg = await loadImageForExport(options.logoUrl);
+    const upscaleFactor = targetLogoSize / Math.max(previewImg.naturalWidth, 1);
+
+    if (upscaleFactor > 2.2 && options.logoRawSource) {
+      logoUrl = await resolveLogoForQrExport(options.logoRawSource, {
+        designQrSize,
+        exportQrSize: qrPixelSize,
+        logoDisplaySize: options.logoSize,
+        logoFitMode: options.logoFitMode,
+        logoFocalX: options.logoFocalX,
+        logoFocalY: options.logoFocalY,
+        logoZoom: options.logoZoom,
+        bgColor: options.bgColor,
+      });
+    } else {
+      logoUrl = await upscaleLogoSquare(options.logoUrl, targetLogoSize);
+    }
   }
 
   return {
@@ -161,14 +209,24 @@ export async function renderExportCanvas(
 ): Promise<HTMLCanvasElement> {
   const resolutionConfig = EXPORT_RESOLUTIONS.find((r) => r.value === resolution);
   const outputSize = resolutionConfig?.size ?? null;
+  const designQrSize = options.designQrSize ?? options.size;
 
   if (resolution === "preview" && previewCanvas?.width && previewCanvas.height) {
     return createExportCanvas(cloneCanvas(previewCanvas), options.bgColor, margin);
   }
 
-  const qrPixelSize = outputSize ? outputSize - margin * 2 : options.size;
+  if (!outputSize) {
+    const sourceCanvas = await renderQRSourceCanvas(options, options.size);
+    return createExportCanvas(sourceCanvas, options.bgColor, margin);
+  }
+
+  const { margin: scaledMargin, qrPixelSize } = computeExportLayout(
+    designQrSize,
+    margin,
+    outputSize,
+  );
   const sourceCanvas = await renderQRSourceCanvas(options, qrPixelSize);
-  return createExportCanvas(sourceCanvas, options.bgColor, margin);
+  return createExportCanvas(sourceCanvas, options.bgColor, scaledMargin);
 }
 
 export function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {

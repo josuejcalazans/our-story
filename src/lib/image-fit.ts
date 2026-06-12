@@ -35,6 +35,25 @@ export type LogoExportContext = {
 };
 
 /** Reprocessa a logo em alta resolução proporcional ao QR exportado */
+/** Escala a logo do preview sem recortar de novo — mantém o enquadramento idêntico */
+export async function upscaleLogoSquare(logoUrl: string, targetSize: number): Promise<string> {
+  if (!logoUrl) return "";
+
+  const img = await loadImage(logoUrl);
+  if (img.naturalWidth === targetSize && img.naturalHeight === targetSize) {
+    return logoUrl;
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetSize;
+  canvas.height = targetSize;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas indisponível");
+
+  drawImageSmooth(ctx, img, 0, 0, targetSize, targetSize);
+  return canvasToSharpDataUrl(canvas);
+}
+
 export async function resolveLogoForQrExport(
   logoSource: string,
   context: LogoExportContext,
