@@ -10,12 +10,29 @@ export type ImageFitOptions = {
   /** 1–2 — zoom extra no recorte */
   zoom?: number;
   bgColor?: string;
-  /** JPEG quality ao exportar */
+  /** @deprecated use PNG export — kept for API compat */
   quality?: number;
 };
 
 const MAX_IMAGE_EDGE = 2400;
 export const MAX_LOGO_FILE_BYTES = 20 * 1024 * 1024;
+
+/** Resolução da foto processada — sempre bem acima do tamanho exibido no QR */
+export function logoProcessPixelSize(qrSize: number, logoSize: number) {
+  const displayRatio = logoSize / Math.max(qrSize, 1);
+  const target = Math.round(Math.max(qrSize, logoSize) * Math.max(4, displayRatio * 8));
+  return Math.min(2048, Math.max(1024, target));
+}
+
+function canvasToSharpDataUrl(canvas: HTMLCanvasElement) {
+  return canvas.toDataURL("image/png");
+}
+
+function drawImageSmooth(ctx: CanvasRenderingContext2D, img: HTMLImageElement, ...args: number[]) {
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, ...args);
+}
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -42,8 +59,8 @@ export async function normalizeImageSource(
   canvas.height = Math.round(img.naturalHeight * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) return source;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.92);
+  drawImageSmooth(ctx, img, 0, 0, canvas.width, canvas.height);
+  return canvasToSharpDataUrl(canvas);
 }
 
 /** Encaixa qualquer proporção num quadrado — ideal para foto no centro do QR */
@@ -58,7 +75,6 @@ export async function fitImageToSquare(
     focalY = 50,
     zoom = 1,
     bgColor = "#ffffff",
-    quality = 0.92,
   } = options;
 
   const normalized = await normalizeImageSource(source);
@@ -81,7 +97,7 @@ export async function fitImageToSquare(
     const h = img.naturalHeight * scale;
     const x = (size - w) / 2;
     const y = (size - h) / 2;
-    ctx.drawImage(img, x, y, w, h);
+    drawImageSmooth(ctx, img, x, y, w, h);
   } else {
     const scale = Math.max(size / img.naturalWidth, size / img.naturalHeight) * safeZoom;
     const w = img.naturalWidth * scale;
@@ -95,11 +111,11 @@ export async function fitImageToSquare(
     ctx.beginPath();
     ctx.rect(0, 0, size, size);
     ctx.clip();
-    ctx.drawImage(img, x, y, w, h);
+    drawImageSmooth(ctx, img, x, y, w, h);
     ctx.restore();
   }
 
-  return canvas.toDataURL("image/jpeg", quality);
+  return canvasToSharpDataUrl(canvas);
 }
 
 export async function readImageFileNormalized(file: File): Promise<string> {

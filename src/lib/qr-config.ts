@@ -49,8 +49,8 @@ export function buildQRStylingConfig(options: StyledQROptions): Options {
     imageOptions: hasLogo
       ? {
           crossOrigin: "anonymous",
-          margin: 4,
-          imageSize: options.logoSize / options.size,
+          margin: 2,
+          imageSize: Math.min(0.52, options.logoSize / options.size),
           hideBackgroundDots: options.logoExcavate,
         }
       : {

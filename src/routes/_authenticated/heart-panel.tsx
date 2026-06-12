@@ -75,6 +75,7 @@ import {
 } from "@/lib/qr-print-card";
 import {
   fitImageToSquare,
+  logoProcessPixelSize,
   MAX_LOGO_FILE_BYTES,
   readImageFileNormalized,
   type ImageFitMode,
@@ -473,7 +474,7 @@ function SharePanel() {
   const [logoUrl, setLogoUrl] = useState("");
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoInput, setLogoInput] = useState("");
-  const [logoSize, setLogoSize] = useState(72);
+  const [logoSize, setLogoSize] = useState(112);
   const [logoFitMode, setLogoFitMode] = useState<ImageFitMode>("cover");
   const [logoFocalX, setLogoFocalX] = useState(50);
   const [logoFocalY, setLogoFocalY] = useState(42);
@@ -527,7 +528,7 @@ function SharePanel() {
     setLogoProcessing(true);
 
     void fitImageToSquare(logoSource, {
-      size: 640,
+      size: logoProcessPixelSize(size, logoSize),
       mode: logoFitMode,
       focalX: logoFocalX,
       focalY: logoFocalY,
@@ -550,7 +551,7 @@ function SharePanel() {
     return () => {
       cancelled = true;
     };
-  }, [logoSource, logoFitMode, logoFocalX, logoFocalY, logoZoom, bgColor]);
+  }, [logoSource, logoFitMode, logoFocalX, logoFocalY, logoZoom, bgColor, size, logoSize]);
 
   const handleLogoFileUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -567,6 +568,7 @@ function SharePanel() {
       const result = await readImageFileNormalized(file);
       setLogoSource(result);
       setLogoOriginalUrl(null);
+      setLogoSize(Math.round(size * 0.42));
       toast.success("Foto enviada! Ajuste o enquadramento abaixo.");
     } catch {
       toast.error("Erro ao ler a imagem");
@@ -1239,11 +1241,14 @@ function SharePanel() {
                   <Slider
                     value={[logoSize]}
                     onValueChange={([v]) => setLogoSize(v)}
-                    min={48}
-                    max={Math.round(size * 0.42)}
+                    min={64}
+                    max={Math.round(size * 0.52)}
                     step={2}
                     className="accent-accent"
                   />
+                  <p className="text-[10px] text-muted-foreground">
+                    {Math.round((logoSize / size) * 100)}% do QR — recomendado 38–45%
+                  </p>
                 </div>
 
                 <div className="flex items-center justify-between text-xs">
