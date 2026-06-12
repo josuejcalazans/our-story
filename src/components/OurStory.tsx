@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, Sparkles, ArrowDown, Play, Lock, X, ZoomIn, ChevronLeft, ChevronRight } from "lucide-react";
+import { Heart, Sparkles, ArrowDown, Play, Lock, X, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   RELATIONSHIP_START as FALLBACK_START,
   HER_NAME as FALLBACK_NAME,
@@ -25,7 +25,10 @@ import RomanceMusicPlayer from "@/components/story/RomanceMusicPlayer";
 import MessageWall from "@/components/story/MessageWall";
 import CinematicEnding from "@/components/story/CinematicEnding";
 import ChapterNav from "@/components/story/ChapterNav";
+import GalleryMasonry from "@/components/story/GalleryMasonry";
 import LoveLetterEnvelope from "@/components/story/LoveLetterEnvelope";
+import StoryVideoPlayer from "@/components/story/StoryVideoPlayer";
+import { isEmbeddableVideo } from "@/lib/video-embed";
 import { StoryIcon } from "@/lib/story-icons";
 import { StoryDateDisplay } from "@/components/StoryDate";
 import {
@@ -349,76 +352,76 @@ function Timeline({
                     filled
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setOpen(isOpen ? null : i)}
-                  className={`glass w-full overflow-hidden rounded-2xl text-left transition-all hover:shadow-glow cursor-pointer sm:w-[calc(50%-3rem)] ${
+                <article
+                  className={`glass w-full overflow-hidden rounded-2xl transition-all hover:shadow-glow sm:w-[calc(50%-3rem)] ${
                     isLeft ? "sm:text-right" : ""
                   }`}
                 >
-                  {item.image_url && (
-                    <div className="h-48 w-full overflow-hidden">
-                      <img
-                        src={item.image_url}
-                        alt={item.title}
-                        className="h-full w-full object-cover transition-transform duration-500 hover:scale-110"
-                      />
-                    </div>
-                  )}
-                  <div className="p-6">
-                    <div className={isLeft ? "sm:flex sm:justify-end" : ""}>
-                      <StoryDateDisplay
-                        value={item.date}
-                        align={isLeft ? "right" : "left"}
-                        showWeekday
-                      />
-                    </div>
-                    <h3 className="mt-3 font-display text-2xl">{item.title}</h3>
-                    <AnimatePresence initial={false}>
-                      {isOpen && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.35 }}
-                          className="overflow-hidden"
-                        >
-                          <p className="mt-3 font-letter text-lg italic leading-relaxed text-muted-foreground">
-                            {item.description}
-                          </p>
-                          {item.video_url && (
-                            <div className="mt-4 overflow-hidden rounded-xl border border-white/10 shadow-lg aspect-video">
-                              {item.video_url.includes("youtube.com") ||
-                              item.video_url.includes("youtu.be") ||
-                              item.video_url.includes("vimeo.com") ? (
-                                <iframe
-                                  title={item.title}
-                                  src={getEmbedUrl(item.video_url)}
-                                  className="h-full w-full"
-                                  allow="autoplay; encrypted-media"
-                                  allowFullScreen
-                                />
-                              ) : (
-                                <video src={item.video_url} controls className="w-full" aria-label={item.title}>
-                                  <track kind="captions" label="Legendas indisponíveis" />
-                                </video>
-                              )}
-                            </div>
-                          )}
-                          {item.place && (
-                            <p className="mt-3 flex items-center gap-1.5 text-xs uppercase tracking-[0.2em] text-accent">
-                              <StoryIcon name="MapPin" className="h-3.5 w-3.5" />
-                              {item.place}
-                            </p>
-                          )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                    {!isOpen && (
-                      <p className="mt-2 text-sm text-muted-foreground/70">Toque para abrir</p>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(isOpen ? null : i)}
+                    className="w-full cursor-pointer text-left"
+                  >
+                    {item.image_url && (
+                      <div className="h-48 w-full overflow-hidden">
+                        <img
+                          src={item.image_url}
+                          alt={item.title}
+                          className="h-full w-full object-cover transition-transform duration-500 hover:scale-110"
+                        />
+                      </div>
                     )}
-                  </div>
-                </button>
+                    <div className="p-6">
+                      <div className={isLeft ? "sm:flex sm:justify-end" : ""}>
+                        <StoryDateDisplay
+                          value={item.date}
+                          align={isLeft ? "right" : "left"}
+                          showWeekday
+                        />
+                      </div>
+                      <h3 className="mt-3 font-display text-2xl">{item.title}</h3>
+                      {!isOpen && (
+                        <p className="mt-2 text-sm text-muted-foreground/70">
+                          {item.video_url ? "Toque para abrir e assistir" : "Toque para abrir"}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        transition={{ duration: 0.3 }}
+                        className={`space-y-4 px-6 pb-6 ${isLeft ? "sm:text-right" : ""}`}
+                      >
+                        <p className="font-letter text-lg italic leading-relaxed text-muted-foreground">
+                          {item.description}
+                        </p>
+                        {item.video_url && (
+                          <div className="text-left">
+                            <StoryVideoPlayer
+                              url={item.video_url}
+                              title={item.title}
+                              clickToPlay
+                            />
+                          </div>
+                        )}
+                        {item.place && (
+                          <p
+                            className={`flex items-center gap-1.5 text-xs uppercase tracking-[0.2em] text-accent ${
+                              isLeft ? "sm:justify-end" : ""
+                            }`}
+                          >
+                            <StoryIcon name="MapPin" className="h-3.5 w-3.5" />
+                            {item.place}
+                          </p>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </article>
               </motion.div>
             );
           })}
@@ -460,23 +463,6 @@ function Places({
   );
 }
 
-/* ------------------------- Helpers ------------------------- */
-function getEmbedUrl(url: string) {
-  if (!url) return "";
-
-  // YouTube
-  const ytMatch = url.match(
-    /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/,
-  );
-  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1`;
-
-  // Vimeo
-  const vMatch = url.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/);
-  if (vMatch) return `https://player.vimeo.com/video/${vMatch[1]}?autoplay=1`;
-
-  return url;
-}
-
 /* ------------------------- Gallery ------------------------- */
 function Gallery() {
   const { data: images, isLoading } = useGallery();
@@ -508,42 +494,7 @@ function Gallery() {
       <p className="mx-auto mt-3 max-w-md text-center text-sm text-muted-foreground">
         Passe o mouse e clique na moldura para ampliar.
       </p>
-      <div className="mt-10 columns-2 gap-5 sm:columns-3">
-        {list.map((img, i) => (
-          <motion.div
-            key={img.id}
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-40px" }}
-            transition={{ delay: i * 0.05 }}
-            className="group mb-5 break-inside-avoid"
-          >
-            <button
-              type="button"
-              onClick={() => setLightboxIndex(i)}
-              className="relative w-full cursor-zoom-in rounded-[1.35rem] p-2 text-left transition-all duration-500 hover:-translate-y-1 hover:shadow-glow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <div className="absolute inset-0 rounded-[1.35rem] border-2 border-transparent transition-all duration-500 group-hover:border-primary/50 group-hover:shadow-[0_0_30px_-5px_var(--primary)]" />
-              <div className="relative overflow-hidden rounded-2xl">
-                <img
-                  src={img.image_url}
-                  alt={img.caption || "Foto da galeria"}
-                  className="w-full object-cover transition-transform duration-700 group-hover:scale-110"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-                <div className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-sm transition-all duration-300 group-hover:opacity-100 group-hover:scale-100 scale-90">
-                  <ZoomIn className="h-4 w-4 text-white" />
-                </div>
-                {img.caption && (
-                  <div className="absolute inset-x-0 bottom-0 p-4 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
-                    <p className="text-xs text-white italic">{img.caption}</p>
-                  </div>
-                )}
-              </div>
-            </button>
-          </motion.div>
-        ))}
-      </div>
+      <GalleryMasonry images={list} onOpen={setLightboxIndex} />
       {list.length === 0 && (
         <p className="text-center text-sm text-muted-foreground italic mt-10">
           Nenhuma foto adicionada ainda.
@@ -623,7 +574,6 @@ function VideoMessage({
   hiddenVideoUrl: string;
 }) {
   const [playing, setPlaying] = useState(false);
-  const embedUrl = useMemo(() => getEmbedUrl(hiddenVideoUrl), [hiddenVideoUrl]);
 
   return (
     <SectionShell id="video-section">
@@ -651,28 +601,15 @@ function VideoMessage({
                 <Play className="ml-1 h-8 w-8 fill-white text-white" />
               </motion.span>
             </button>
-          ) : hiddenUnlocked && hiddenVideoUrl ? (
-            hiddenVideoUrl.includes("youtube.com") ||
-            hiddenVideoUrl.includes("youtu.be") ||
-            hiddenVideoUrl.includes("vimeo.com") ? (
-              <iframe
-                src={embedUrl}
-                className="absolute inset-0 h-full w-full"
-                allow="autoplay; encrypted-media"
-                allowFullScreen
+          ) : hiddenUnlocked && hiddenVideoUrl && isEmbeddableVideo(hiddenVideoUrl) ? (
+            <div className="absolute inset-0">
+              <StoryVideoPlayer
+                url={hiddenVideoUrl}
                 title="Vídeo escondido"
+                autoplay
+                fill
               />
-            ) : (
-              <video
-                src={hiddenVideoUrl}
-                controls
-                autoPlay
-                aria-label="Vídeo escondido"
-                className="absolute inset-0 h-full w-full"
-              >
-                <track kind="captions" label="Legendas indisponíveis" />
-              </video>
-            )
+            </div>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
               <Lock className="h-8 w-8 text-secondary" />
