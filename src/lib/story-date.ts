@@ -68,6 +68,10 @@ export function formatStoryDateParts(date: Date) {
   };
 }
 
+export function formatStoryDateTime(date: Date): string {
+  return `${formatStoryDateLong(date)} · ${format(date, "HH:mm", { locale: ptBR })}`;
+}
+
 export function toDateOnlyString(date: Date): string {
   return format(date, "yyyy-MM-dd");
 }

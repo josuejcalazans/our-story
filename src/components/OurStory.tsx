@@ -33,6 +33,7 @@ import { isHeicUrl } from "@/lib/prepare-upload-image";
 import { isEmbeddableVideo } from "@/lib/video-embed";
 import { StoryIcon } from "@/lib/story-icons";
 import { StoryDateDisplay } from "@/components/StoryDate";
+import { formatStoryDateTime } from "@/lib/story-date";
 import {
   Dialog,
   DialogContent,
@@ -716,7 +717,7 @@ function Memories({
                         {unlocked
                           ? "Toque para abrir"
                           : e.unlock_at
-                            ? `Desbloqueia em ${new Date(e.unlock_at).toLocaleDateString("pt-BR")}`
+                            ? `Desbloqueia em ${formatStoryDateTime(new Date(e.unlock_at))}`
                             : "Ainda guardada"}
                       </p>
                     </div>
