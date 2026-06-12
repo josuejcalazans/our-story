@@ -5,15 +5,25 @@ const PARSE_FORMATS = [
   "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
   "yyyy-MM-dd'T'HH:mm:ss",
   "yyyy-MM-dd",
-  "dd MMM yyyy",
+  "d MMMM yyyy",
+  "dd MMMM yyyy",
   "d MMM yyyy",
-  "dd/MM/yyyy",
+  "dd MMM yyyy",
   "d/M/yyyy",
+  "dd/MM/yyyy",
 ] as const;
+
+function normalizeDateText(value: string) {
+  return value
+    .trim()
+    .replace(/\bde\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export function parseStoryDate(value: string | null | undefined): Date | null {
   if (!value?.trim()) return null;
-  const trimmed = value.trim();
+  const trimmed = normalizeDateText(value);
 
   // yyyy-MM-dd sem hora — evita deslocamento UTC no calendário
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
