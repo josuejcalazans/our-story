@@ -104,7 +104,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import QRStylePicker from "@/components/QRStylePicker";
 import { useStyledQRCode } from "@/hooks/use-styled-qr";
-import { canvasToBlob, downloadBlob, EXPORT_RESOLUTIONS, renderExportCanvas, type ExportResolution } from "@/lib/qr-export";
+import { canvasToBlob, createExportCanvas, downloadBlob, EXPORT_RESOLUTIONS, prepareExportOptions, renderExportCanvas, renderQRSourceCanvas, type ExportResolution } from "@/lib/qr-export";
 import {
   renderPrintCardBackCanvas,
   renderPrintCardFrontCanvas,
@@ -860,6 +860,7 @@ function SharePanel() {
     () => ({
       data: url,
       size,
+      designQrSize: size,
       fgColor,
       bgColor,
       level,
@@ -869,6 +870,11 @@ function SharePanel() {
       logoUrl,
       logoSize,
       logoExcavate,
+      logoRawSource: logoSource || logoUrl,
+      logoFitMode,
+      logoFocalX,
+      logoFocalY,
+      logoZoom,
     }),
     [
       url,
@@ -882,6 +888,11 @@ function SharePanel() {
       logoUrl,
       logoSize,
       logoExcavate,
+      logoSource,
+      logoFitMode,
+      logoFocalX,
+      logoFocalY,
+      logoZoom,
     ],
   );
 
@@ -1039,10 +1050,28 @@ function SharePanel() {
     setIsSavingQR(true);
     try {
       const margin = includeMargin ? borderMargin : 0;
-      const storedLogoUrl = await ensureLogoStorageUrl(logoUrl);
+      const fhdQrSize = 1920 - margin * 2;
+      const cardQrSize = 520;
+
+      const [fhdOptions, cardOptions] = await Promise.all([
+        prepareExportOptions(styledQROptions, fhdQrSize),
+        prepareExportOptions(styledQROptions, cardQrSize),
+      ]);
+
+      const storedLogoUrl = fhdOptions.logoUrl
+        ? await ensureLogoStorageUrl(fhdOptions.logoUrl)
+        : "";
+
+      const exportOptions = {
+        ...fhdOptions,
+        logoUrl: storedLogoUrl || fhdOptions.logoUrl,
+      };
+      const cardExportOptions = {
+        ...cardOptions,
+        logoUrl: storedLogoUrl || cardOptions.logoUrl,
+      };
+
       const savedAt = new Date().toISOString();
-      const optionsWithStoredLogo = { ...styledQROptions, logoUrl: storedLogoUrl };
-      const previewCanvas = qrCanvasRef.current?.querySelector("canvas") ?? null;
 
       const config = {
         url,
@@ -1050,7 +1079,7 @@ function SharePanel() {
         bgColor,
         size,
         level,
-        logoUrl: storedLogoUrl,
+        logoUrl: storedLogoUrl || logoUrl,
         logoSize,
         logoFitMode,
         logoFocalX,
@@ -1066,9 +1095,12 @@ function SharePanel() {
       };
 
       const [qrExport, cardSheet, cardFront] = await Promise.all([
-        renderExportCanvas(optionsWithStoredLogo, margin, "fhd"),
-        renderPrintCardSheetCanvas(optionsWithStoredLogo, margin, printCardLayout, previewCanvas),
-        renderPrintCardFrontCanvas(optionsWithStoredLogo, margin, printCardLayout, previewCanvas),
+        (async () => {
+          const qrCanvas = await renderQRSourceCanvas(exportOptions, fhdQrSize, null, true);
+          return createExportCanvas(qrCanvas, exportOptions.bgColor, margin);
+        })(),
+        renderPrintCardSheetCanvas(cardExportOptions, margin, printCardLayout, null, true),
+        renderPrintCardFrontCanvas(cardExportOptions, margin, printCardLayout, null, true),
       ]);
 
       const [qrImageUrl, cardSheetUrl, cardFrontUrl] = await Promise.all([
@@ -1099,7 +1131,6 @@ function SharePanel() {
 
       if (storedLogoUrl && storedLogoUrl !== logoUrl) {
         setLogoUrl(storedLogoUrl);
-        setLogoSource(storedLogoUrl);
         setLogoPreview(storedLogoUrl);
       }
 
