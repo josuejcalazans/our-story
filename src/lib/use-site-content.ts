@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { sortGalleryImages } from "@/lib/gallery-sort";
+import { sortTimelineEvents } from "@/lib/timeline-sort";
 
 export type TimelineEvent = {
   id: string;
@@ -96,7 +97,7 @@ export function useTimeline() {
         .select("*")
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return data;
+      return sortTimelineEvents((data ?? []) as TimelineEvent[]);
     },
   });
 }
