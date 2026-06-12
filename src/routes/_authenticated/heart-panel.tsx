@@ -1598,9 +1598,9 @@ function TimelineEditor() {
 
   async function add() {
     const { error } = await supabase.from("timeline_events").insert({
-      date_text: "Nova data",
-      title: "Novo momento",
-      description: "Descreva esse momento...",
+      date_text: "",
+      title: "",
+      description: "",
       place: "",
       sort_order: nextSortOrder(sorted),
     });
