@@ -46,11 +46,17 @@ import {
 import { sortGalleryByDate, sortGalleryImages } from "@/lib/gallery-sort";
 import {
   hasDuplicateSortOrder,
+  hasGapsInSortOrder,
   nextSortOrder,
-  persistTableOrder,
+  persistOrderOptimistic,
   sortByOrder,
   swapInList,
 } from "@/lib/admin-order";
+import {
+  countUnparseableTimelineDates,
+  sortTimelineByDate,
+  sortTimelineEvents,
+} from "@/lib/timeline-sort";
 import HeicSafeImage from "@/components/admin/HeicSafeImage";
 import {
   isHeicFile,
@@ -58,6 +64,13 @@ import {
   prepareImageForUpload,
   repairHeicImageUrl,
 } from "@/lib/prepare-upload-image";
+import {
+  isMovFile,
+  isMovUrl,
+  prepareVideoForUpload,
+  repairMovVideoUrl,
+  type VideoConvertProgress,
+} from "@/lib/prepare-upload-video";
 import StoryVideoPlayer from "@/components/story/StoryVideoPlayer";
 import { useAuth } from "@/lib/use-auth";
 import {
@@ -368,18 +381,11 @@ function GalleryEditor() {
 
   async function moveImage(id: string, direction: "up" | "down") {
     const list = sortGalleryImages(data ?? []);
-    const index = list.findIndex((img) => img.id === id);
-    if (index < 0) return;
-    const target = direction === "up" ? index - 1 : index + 1;
-    if (target < 0 || target >= list.length) return;
-
-    const next = [...list];
-    [next[index], next[target]] = [next[target], next[index]];
+    const next = swapInList(list, id, direction);
+    if (!next) return;
 
     try {
-      await persistTableOrder("gallery_images", next);
-      refresh();
-      toast.success("Ordem da galeria atualizada!");
+      await persistOrderOptimistic(qc, ["gallery_images"], "gallery_images", next);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
     }
@@ -388,8 +394,7 @@ function GalleryEditor() {
   async function normalizeOrder() {
     const list = sortGalleryImages(data ?? []);
     try {
-      await persistTableOrder("gallery_images", list);
-      refresh();
+      await persistOrderOptimistic(qc, ["gallery_images"], "gallery_images", list);
       toast.success("Ordem da galeria corrigida!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao corrigir ordem");
@@ -399,8 +404,7 @@ function GalleryEditor() {
   async function sortByDate() {
     const list = sortGalleryByDate(data ?? []);
     try {
-      await persistTableOrder("gallery_images", list);
-      refresh();
+      await persistOrderOptimistic(qc, ["gallery_images"], "gallery_images", list);
       toast.success("Galeria ordenada por data!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao ordenar");
@@ -1585,6 +1589,15 @@ function MediaUpload({
   const [uploading, setUploading] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [previewBroken, setPreviewBroken] = useState(false);
+  const [convertLabel, setConvertLabel] = useState<string | null>(null);
+
+  function onVideoConvertProgress(progress: VideoConvertProgress) {
+    if (progress.stage === "loading") {
+      setConvertLabel("Carregando conversor…");
+      return;
+    }
+    setConvertLabel(`Convertendo MOV… ${Math.round(progress.ratio * 100)}%`);
+  }
 
   async function handleRepairHeic() {
     if (!currentUrl || !isHeicUrl(currentUrl)) return;
@@ -1603,11 +1616,31 @@ function MediaUpload({
     }
   }
 
+  async function handleRepairMov() {
+    if (!currentUrl || !isMovUrl(currentUrl)) return;
+    setRepairing(true);
+    setConvertLabel("Carregando conversor…");
+    try {
+      toast.message("Convertendo MOV para MP4… pode levar um minuto", { duration: 4000 });
+      const newUrl = await repairMovVideoUrl(currentUrl, onVideoConvertProgress);
+      onUpload(newUrl);
+      setPreviewBroken(false);
+      toast.success("Vídeo MOV corrigido! Clique em Salvar para guardar.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao corrigir MOV");
+      console.error(err);
+    } finally {
+      setRepairing(false);
+      setConvertLabel(null);
+    }
+  }
+
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
+    setConvertLabel(null);
     try {
       let uploadFile = file;
       if (type === "image") {
@@ -1616,6 +1649,9 @@ function MediaUpload({
         if (wasHeic) {
           toast.message("Convertendo HEIC para JPEG em alta qualidade…", { duration: 2000 });
         }
+      } else if (type === "video" && isMovFile(file)) {
+        toast.message("Convertendo MOV para MP4… pode levar um minuto", { duration: 4000 });
+        uploadFile = await prepareVideoForUpload(file, onVideoConvertProgress);
       }
 
       const fileExt = uploadFile.name.split(".").pop() || "bin";
@@ -1633,23 +1669,33 @@ function MediaUpload({
 
       const { data } = supabase.storage.from("assets").getPublicUrl(filePath);
       onUpload(data.publicUrl);
+      const wasHeic = type === "image" && isHeicFile(file);
+      const wasMov = type === "video" && isMovFile(file);
       toast.success(
-        type === "image" && isHeicFile(file) ? "HEIC convertido e enviado!" : "Upload concluído!",
+        wasHeic ? "HEIC convertido e enviado!" : wasMov ? "MOV convertido e enviado!" : "Upload concluído!",
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Erro no upload";
-      toast.error(
-        type === "image" && isHeicFile(file) ? `Falha ao converter HEIC: ${message}` : message,
-      );
+      if (type === "image" && isHeicFile(file)) {
+        toast.error(`Falha ao converter HEIC: ${message}`);
+      } else if (type === "video" && isMovFile(file)) {
+        toast.error(`Falha ao converter MOV: ${message}`);
+      } else {
+        toast.error(message);
+      }
       console.error(err);
     } finally {
       setUploading(false);
+      setConvertLabel(null);
       e.target.value = "";
     }
   }
 
   const showHeicRepair =
     type === "image" && currentUrl && (isHeicUrl(currentUrl) || previewBroken);
+
+  const showMovRepair =
+    type === "video" && currentUrl && (isMovUrl(currentUrl) || previewBroken);
 
   return (
     <div className="space-y-2">
@@ -1669,6 +1715,7 @@ function MediaUpload({
               playsInline
               preload="metadata"
               className="h-20 w-32 rounded-lg border border-white/5 bg-black object-cover"
+              onError={() => setPreviewBroken(true)}
             />
           ) : (
             <div className="flex h-20 w-32 items-center justify-center rounded-lg bg-white/10 text-xs border border-white/5">
@@ -1703,6 +1750,25 @@ function MediaUpload({
           )}
         </Button>
       )}
+      {showMovRepair && (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={repairing || uploading}
+          onClick={() => void handleRepairMov()}
+          className="rounded-lg text-xs"
+        >
+          {repairing ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {convertLabel ?? "Corrigindo MOV…"}
+            </>
+          ) : (
+            "Corrigir MOV → MP4"
+          )}
+        </Button>
+      )}
       <div className="flex items-center gap-2">
         <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm transition-colors hover:bg-white/10 border border-white/5">
           {uploading ? (
@@ -1712,7 +1778,7 @@ function MediaUpload({
           )}
           <span>
             {uploading
-              ? "Subindo..."
+              ? convertLabel ?? "Subindo..."
               : `Upload ${type === "image" ? "Foto" : type === "audio" ? "Áudio" : "Vídeo"}`}
           </span>
           <input
@@ -1722,7 +1788,7 @@ function MediaUpload({
                 ? "image/*,.heic,.heif,.HEIC,.HEIF"
                 : type === "audio"
                   ? "audio/*"
-                  : "video/*"
+                  : "video/*,.mov,.qt,.MOV"
             }
             className="hidden"
             onChange={handleFile}
@@ -1739,7 +1805,12 @@ function TimelineEditor() {
   const { data, isLoading } = useTimeline();
   const qc = useQueryClient();
   const refresh = () => qc.invalidateQueries({ queryKey: ["timeline_events"] });
-  const sorted = useMemo(() => sortByOrder(data ?? []), [data]);
+  const sorted = useMemo(() => sortTimelineEvents(data ?? []), [data]);
+  const badDates = useMemo(() => countUnparseableTimelineDates(sorted), [sorted]);
+  const orderNeedsFix = useMemo(
+    () => hasDuplicateSortOrder(sorted) || hasGapsInSortOrder(sorted),
+    [sorted],
+  );
 
   async function add() {
     const { error } = await supabase.from("timeline_events").insert({
@@ -1757,21 +1828,79 @@ function TimelineEditor() {
     const next = swapInList(sorted, id, direction);
     if (!next) return;
     try {
-      await persistTableOrder("timeline_events", next);
-      refresh();
+      await persistOrderOptimistic(qc, ["timeline_events"], "timeline_events", next);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
+    }
+  }
+
+  async function normalizeOrder() {
+    try {
+      await persistOrderOptimistic(qc, ["timeline_events"], "timeline_events", sorted);
+      toast.success("Ordem renumerada (1, 2, 3…)");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao corrigir ordem");
+    }
+  }
+
+  async function sortByDate() {
+    const list = sortTimelineByDate(sorted);
+    try {
+      await persistOrderOptimistic(qc, ["timeline_events"], "timeline_events", list);
+      if (badDates > 0) {
+        toast.success(
+          `Timeline ordenada por data! ${badDates} item(ns) sem data válida ficaram no final.`,
+        );
+      } else {
+        toast.success("Timeline ordenada do mais antigo ao mais recente!");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao ordenar");
     }
   }
 
   if (isLoading) return <Loader />;
   return (
     <div className="space-y-4">
-      <AdminOrderHint>
+      <AdminOrderHint
+        action={
+          <div className="flex flex-wrap gap-2">
+            {orderNeedsFix && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void normalizeOrder()}
+                className="rounded-xl"
+              >
+                Renumerar ordem
+              </Button>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => void sortByDate()}
+              className="gap-2 rounded-xl"
+            >
+              <ArrowUpDown className="h-4 w-4" />
+              Ordenar por data
+            </Button>
+          </div>
+        }
+      >
         <p>
-          A ordem aqui é <span className="text-foreground">de cima para baixo</span> na linha do
-          tempo. Use as setas em cada card para reorganizar.
+          A linha do tempo no site segue <span className="text-foreground">sort_order</span> (1, 2,
+          3…). Se ficou bagunçado, clique em{" "}
+          <span className="text-foreground">Ordenar por data</span> para alinhar pelo campo{" "}
+          <span className="text-foreground">date_text</span> (antigo → recente).
         </p>
+        {badDates > 0 && (
+          <p className="mt-2 text-xs text-amber-200/90">
+            {badDates} momento(s) com data que o sistema não entende — corrija no calendário ou use
+            o formato <span className="font-mono">12 jun 2023</span>.
+          </p>
+        )}
       </AdminOrderHint>
       <AdminOrderableGrid>
         {sorted.map((ev, index) => (
@@ -1960,8 +2089,7 @@ function StatsEditor() {
     const next = swapInList(sorted, id, direction);
     if (!next) return;
     try {
-      await persistTableOrder("stats", next);
-      refresh();
+      await persistOrderOptimistic(qc, ["stats"], "stats", next);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
     }
@@ -2418,8 +2546,7 @@ function PlacesEditor() {
     const next = swapInList(sorted, id, direction);
     if (!next) return;
     try {
-      await persistTableOrder("places", next);
-      refresh();
+      await persistOrderOptimistic(qc, ["places"], "places", next);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
     }
@@ -2598,8 +2725,7 @@ function LoveNotesEditor() {
     const next = swapInList(sorted, id, direction);
     if (!next) return;
     try {
-      await persistTableOrder("love_notes", next);
-      refresh();
+      await persistOrderOptimistic(qc, ["love_notes"], "love_notes", next);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
     }
@@ -2733,8 +2859,7 @@ function MemoriesEditor() {
     const next = swapInList(sorted, id, direction);
     if (!next) return;
     try {
-      await persistTableOrder("memory_envelopes", next);
-      refresh();
+      await persistOrderOptimistic(qc, ["memory_envelopes"], "memory_envelopes", next);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao reordenar");
     }
